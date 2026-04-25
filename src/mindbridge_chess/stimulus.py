@@ -1,10 +1,13 @@
 """Stimulus presentation logic using PsychoPy."""
 
 from pathlib import Path
+import random
 import time
 
 import chess
 from psychopy import core, event, visual
+
+from .lsl_markers import LSLMarkerOutlet
 
 # Board geometry (pixels, PsychoPy units='pix', origin at screen centre)
 _SQ   = 80          # square side length
@@ -26,13 +29,6 @@ class ExperimentStopped(Exception):
     """Raised when the user asks to stop the experiment window."""
 
 
-class ManualSelection(Exception):
-    """Raised when the user manually selects the highlighted stimulus."""
-
-    def __init__(self, stimulus_index: int):
-        self.stimulus_index = stimulus_index
-
-
 class StimulusPresenter:
     """Renders the chess board and drives the P300 flashing protocol."""
 
@@ -41,6 +37,11 @@ class StimulusPresenter:
         self._flash_dur = cfg.get('flash_duration_ms', 100) / 1000.0
         self._ifi       = cfg.get('inter_flash_ms',    75)  / 1000.0
         self._cycles    = cfg.get('cycles_per_decision', 3)
+        self._markers = LSLMarkerOutlet(
+            name=cfg.get("lsl_marker_stream_name", "MindBridgeEvents"),
+            stream_type=cfg.get("lsl_marker_stream_type", "Markers"),
+            source_id=cfg.get("lsl_marker_source_id", "mindbridge_chess_events"),
+        )
 
         self.win = visual.Window(
             size=(720, 720),
@@ -66,12 +67,13 @@ class StimulusPresenter:
         self._check_for_exit()
         self._draw_base(board)
         self.win.flip()
+        self._push_marker("board_draw")
 
-    def wait(self, duration: float, selection_index: int = None) -> None:
+    def wait(self, duration: float) -> None:
         """Wait while still responding to exit keys."""
         end_time = time.time() + duration
         while time.time() < end_time:
-            self._check_for_keys(selection_index)
+            self._check_for_keys()
             core.wait(min(0.02, end_time - time.time()))
 
     def flash_squares(self, board: chess.Board, squares: list) -> list:
@@ -83,19 +85,27 @@ class StimulusPresenter:
         the flashed square within *squares*.
         """
         log: list = []
-        for _cycle in range(self._cycles):
+        for cycle in range(self._cycles):
             for i, sq in enumerate(squares):
                 self._check_for_exit()
 
                 # --- flash ON ---
                 self._draw_base(board, highlight_sq=sq)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"flash_on;square={chess.square_name(sq)};index={i};cycle={cycle + 1}",
+                )
                 ts = time.time()
                 self.win.flip()
-                log.append((i, ts))
-                self.wait(self._flash_dur, selection_index=i)
+                log.append((i, ts, cycle + 1))
+                self.wait(self._flash_dur)
 
                 # --- flash OFF ---
                 self._draw_base(board)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"flash_off;square={chess.square_name(sq)};index={i};cycle={cycle + 1}",
+                )
                 self.win.flip()
                 self.wait(self._ifi)
         return log
@@ -108,17 +118,66 @@ class StimulusPresenter:
         column path instead of a single destination square.
         """
         log: list = []
-        for _cycle in range(self._cycles):
+        for cycle in range(self._cycles):
             for i, squares in enumerate(square_groups):
                 self._check_for_exit()
 
                 self._draw_base(board, highlight_squares=squares)
+                square_names = ",".join(chess.square_name(sq) for sq in squares)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"group_flash_on;squares={square_names};index={i};cycle={cycle + 1}",
+                )
                 ts = time.time()
                 self.win.flip()
-                log.append((i, ts))
-                self.wait(self._flash_dur, selection_index=i)
+                log.append((i, ts, cycle + 1))
+                self.wait(self._flash_dur)
 
                 self._draw_base(board)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"group_flash_off;squares={square_names};index={i};cycle={cycle + 1}",
+                )
+                self.win.flip()
+                self.wait(self._ifi)
+        return log
+
+    def flash_labeled_square_groups(
+        self,
+        board: chess.Board,
+        labeled_square_groups: list,
+        cycles: int,
+        target_label: str,
+        marker_prefix: str,
+    ) -> list:
+        """Flash labeled square groups and mark target/non-target events for calibration."""
+        log: list = []
+        for cycle in range(cycles):
+            self._push_marker(f"{marker_prefix}_cycle_start;cycle={cycle + 1}")
+            cycle_groups = list(labeled_square_groups)
+            random.shuffle(cycle_groups)
+            for i, (label, squares) in enumerate(cycle_groups):
+                self._check_for_exit()
+                square_names = ",".join(chess.square_name(sq) for sq in squares)
+                target = int(label == target_label)
+
+                self._draw_base(board, highlight_squares=squares)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"{marker_prefix}_flash_on;box={label};index={i};cycle={cycle + 1};"
+                    f"target={target};squares={square_names}",
+                )
+                ts = time.time()
+                self.win.flip()
+                log.append((i, ts, label, cycle + 1, target))
+                self.wait(self._flash_dur)
+
+                self._draw_base(board)
+                self.win.callOnFlip(
+                    self._push_marker,
+                    f"{marker_prefix}_flash_off;box={label};index={i};cycle={cycle + 1};"
+                    f"target={target};squares={square_names}",
+                )
                 self.win.flip()
                 self.wait(self._ifi)
         return log
@@ -142,11 +201,17 @@ class StimulusPresenter:
             height=80,
             bold=True,
         ).draw()
+        self.win.callOnFlip(self._push_marker, f"message;value={text}")
         self.win.flip()
         self.wait(duration)
 
     def close(self) -> None:
+        self._push_marker("experiment_closed")
         self.win.close()
+
+    def send_marker(self, marker: str) -> None:
+        """Publish a non-visual experiment marker."""
+        self._push_marker(marker)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -155,12 +220,13 @@ class StimulusPresenter:
     def _check_for_exit(self) -> None:
         self._check_for_keys()
 
-    def _check_for_keys(self, selection_index: int = None) -> None:
-        keys = event.getKeys(keyList=['escape', 'q', 'space'])
+    def _push_marker(self, marker: str) -> None:
+        self._markers.push(marker)
+
+    def _check_for_keys(self) -> None:
+        keys = event.getKeys(keyList=['escape', 'q'])
         if 'escape' in keys or 'q' in keys:
             raise ExperimentStopped()
-        if selection_index is not None and 'space' in keys:
-            raise ManualSelection(selection_index)
 
     def _sq_to_xy(self, sq: int) -> tuple:
         file = chess.square_file(sq)

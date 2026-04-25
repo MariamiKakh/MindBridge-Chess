@@ -31,6 +31,9 @@ class P300Detector:
         self.last_scores = np.array([], dtype=np.float64)
         self.last_counts = np.array([], dtype=np.int32)
         self.last_confidence = 0.0
+        self.calibrated = False
+        self.calibration_summary = {}
+        self._calibration_weights = None
 
     # ------------------------------------------------------------------
     def detect(
@@ -53,22 +56,11 @@ class P300Detector:
             if stim_i < 0 or stim_i >= n_stimuli or start < 0 or end > len(eeg_data):
                 continue
 
-            epoch = eeg_data[start:end, :].astype(np.float64)
-            channel_scores = []
-
-            for channel in self._channels:
-                if channel < 0 or channel >= epoch.shape[1]:
-                    continue
-                signal = epoch[:, channel]
-                baseline = signal[self._bl_start : self._bl_end].mean()
-                signal = signal - baseline
-                signal = self._smooth(signal)
-                channel_scores.append(signal[self._p3_start : self._p3_end].mean())
-
-            if not channel_scores:
+            features = self._extract_features(eeg_data[start:end, :])
+            if features is None:
                 continue
 
-            scores[stim_i] += float(np.mean(channel_scores))
+            scores[stim_i] += self._score_features(features)
             counts[stim_i] += 1
 
         valid = counts > 0
@@ -77,6 +69,65 @@ class P300Detector:
 
         self._store_result(scores, counts)
         return int(np.argmax(scores))
+
+    def fit_calibration(self, eeg_data: np.ndarray, triggers: list) -> bool:
+        """
+        Learn target-vs-non-target channel weights from calibration epochs.
+
+        Triggers are tuples of (stim_index, sample_index, is_target).
+        """
+        target_features = []
+        non_target_features = []
+
+        if eeg_data.size == 0:
+            return False
+
+        for _stim_i, sample_idx, is_target in triggers:
+            start = sample_idx - self._pre
+            end = sample_idx + self._post
+            if start < 0 or end > len(eeg_data):
+                continue
+
+            features = self._extract_features(eeg_data[start:end, :])
+            if features is None:
+                continue
+
+            if is_target:
+                target_features.append(features)
+            else:
+                non_target_features.append(features)
+
+        if not target_features or not non_target_features:
+            self.calibrated = False
+            self.calibration_summary = {
+                "target_epochs": len(target_features),
+                "non_target_epochs": len(non_target_features),
+                "status": "insufficient_epochs",
+            }
+            return False
+
+        target_mean = np.mean(np.vstack(target_features), axis=0)
+        non_target_mean = np.mean(np.vstack(non_target_features), axis=0)
+        weights = target_mean - non_target_mean
+
+        if not np.any(weights):
+            self.calibrated = False
+            self.calibration_summary = {
+                "target_epochs": len(target_features),
+                "non_target_epochs": len(non_target_features),
+                "status": "flat_weights",
+            }
+            return False
+
+        self._calibration_weights = weights
+        self.calibrated = True
+        self.calibration_summary = {
+            "target_epochs": len(target_features),
+            "non_target_epochs": len(non_target_features),
+            "status": "ok",
+            "weights": weights.tolist(),
+        }
+        return True
 
     # ------------------------------------------------------------------
     def _ms(self, ms: float) -> int:
@@ -88,6 +139,28 @@ class P300Detector:
             return signal
         kernel = np.ones(window, dtype=np.float64) / window
         return np.convolve(signal, kernel, mode="same")
+
+    def _extract_features(self, epoch: np.ndarray):
+        epoch = epoch.astype(np.float64)
+        channel_scores = []
+
+        for channel in self._channels:
+            if channel < 0 or channel >= epoch.shape[1]:
+                continue
+            signal = epoch[:, channel]
+            baseline = signal[self._bl_start : self._bl_end].mean()
+            signal = signal - baseline
+            signal = self._smooth(signal)
+            channel_scores.append(signal[self._p3_start : self._p3_end].mean())
+
+        if not channel_scores:
+            return None
+        return np.asarray(channel_scores, dtype=np.float64)
+
+    def _score_features(self, features: np.ndarray) -> float:
+        if self.calibrated and self._calibration_weights is not None:
+            return float(np.dot(features, self._calibration_weights))
+        return float(np.mean(features))
 
     def _store_result(self, scores: np.ndarray, counts: np.ndarray) -> None:
         self.last_scores = scores.copy()

@@ -28,9 +28,8 @@ class EEGAcquisition:
     """
     Streams EEG from Unicorn Hybrid Black into a rolling numpy buffer.
 
-    When UnicornPy is not installed or no device is paired, falls back to a
-    simulation mode that generates Gaussian noise at 250 Hz so the full visual
-    and detection pipeline can be exercised without hardware.
+    Uses the UnicornPy SDK when available, or a Unicorn EEG LSL stream when the
+    headset is being streamed by Unicorn Recorder/LSL.
     """
 
     # Unicorn Hybrid Black: 8 EEG + 3 accel + 3 gyro + battery + counter + validation
@@ -49,6 +48,7 @@ class EEGAcquisition:
         self.device_name: str | None = None
         self.last_error: str | None = None
         self._device = None
+        self._lsl_inlet = None
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
@@ -100,6 +100,14 @@ class EEGAcquisition:
         elif not self.force_simulation:
             self.last_error = "UnicornPy SDK is not installed."
 
+        if not self.force_simulation:
+            try:
+                if self._start_lsl_stream():
+                    return
+            except Exception as exc:
+                self.last_error = str(exc)
+                print(f"[EEG] LSL init failed ({exc}).")
+
         if not self.allow_simulation:
             raise RuntimeError(self.last_error or "Unicorn hardware is unavailable.")
 
@@ -120,6 +128,7 @@ class EEGAcquisition:
                 self._device.StopAcquisition()
             except Exception:
                 pass
+        self._lsl_inlet = None
         self.mode = "stopped"
 
     @property
@@ -148,6 +157,43 @@ class EEGAcquisition:
             return np.concatenate(self._chunks, axis=0)
 
     # ------------------------------------------------------------------
+    def _start_lsl_stream(self) -> bool:
+        try:
+            from pylsl import StreamInlet, resolve_streams
+        except Exception as exc:
+            self.last_error = f"pylsl is unavailable: {exc}"
+            return False
+
+        streams = resolve_streams(wait_time=3.0)
+        eeg_streams = [
+            stream
+            for stream in streams
+            if stream.type().lower() == "eeg" and "unicorn" in stream.name().lower()
+        ]
+        if not eeg_streams:
+            self.last_error = "No Unicorn EEG LSL stream found."
+            return False
+
+        preferred = next(
+            (
+                stream
+                for stream in eeg_streams
+                if stream.name() == "UnicornRecorderLSLStream"
+            ),
+            eeg_streams[0],
+        )
+        self._lsl_inlet = StreamInlet(preferred, max_buflen=30)
+        self.device_name = preferred.name()
+        if preferred.nominal_srate() > 0:
+            self.sample_rate = int(preferred.nominal_srate())
+        self.simulated = False
+        self.mode = "lsl"
+        self._running = True
+        self._thread = threading.Thread(target=self._lsl_acquire_loop, daemon=True)
+        self._thread.start()
+        print(f"[EEG] Streaming from Unicorn LSL stream: {self.device_name}")
+        return True
+
     def _acquire_loop(self) -> None:
         frame_bytes = self._TOTAL_CH * self._SCANS_PER_READ * 4  # float32
         buf = bytearray(frame_bytes)
@@ -162,6 +208,24 @@ class EEGAcquisition:
                     self._chunks.append(eeg)
                     self._sample_count += self._SCANS_PER_READ
             except Exception:
+                break
+
+    def _lsl_acquire_loop(self) -> None:
+        while self._running:
+            try:
+                samples, _timestamps = self._lsl_inlet.pull_chunk(
+                    timeout=0.1,
+                    max_samples=max(1, self.sample_rate // 10),
+                )
+                if not samples:
+                    continue
+                data = np.asarray(samples, dtype=np.float32)
+                eeg = data[:, : self._EEG_CH].copy()
+                with self._lock:
+                    self._chunks.append(eeg)
+                    self._sample_count += len(eeg)
+            except Exception as exc:
+                self.last_error = str(exc)
                 break
 
     def _simulate_loop(self) -> None:
