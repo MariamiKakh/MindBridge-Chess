@@ -1,5 +1,6 @@
 """Stimulus presentation logic using PsychoPy."""
 
+from pathlib import Path
 import time
 
 import chess
@@ -15,6 +16,9 @@ _LIGHT  = ( 0.64,  0.09, -0.44)   # warm beige
 _DARK   = (-0.40, -0.63, -0.78)   # dark brown
 _FLASH  = ( 1.00,  1.00, -1.00)   # bright yellow
 _WIN_BG = (-0.69, -0.69, -0.69)   # dark grey
+_KING_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingBlack.png"
+_ROOK_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "RookWhite.png"
+_KNIGHT_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "figures" / "knight.png"
 
 
 class StimulusPresenter:
@@ -35,6 +39,9 @@ class StimulusPresenter:
             allowGUI=True,
         )
         self._rects: dict = {}   # chess.Square -> (Rect, base_color_tuple)
+        self._king = self._init_king_image()
+        self._white_rook = self._init_white_rook_image()
+        self._knight = self._init_knight_image()
         self._init_rects()
 
     # ------------------------------------------------------------------
@@ -123,6 +130,36 @@ class StimulusPresenter:
             )
             self._rects[sq] = (rect, base)
 
+    def _init_king_image(self):
+        if not _KING_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_KING_IMAGE),
+            size=(_SQ * 0.72, _SQ * 0.72),
+            units='pix',
+        )
+
+    def _init_white_rook_image(self):
+        if not _ROOK_WHITE_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_ROOK_WHITE_IMAGE),
+            size=(_SQ * 0.62, _SQ * 0.68),
+            units='pix',
+        )
+
+    def _init_knight_image(self):
+        if not _KNIGHT_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_KNIGHT_IMAGE),
+            size=(_SQ * 0.62, _SQ * 0.78),
+            units='pix',
+        )
+
     def _draw_base(self, board: chess.Board, highlight_sq=None) -> None:
         """Draw all squares + pieces without flipping."""
         for sq, (rect, base) in self._rects.items():
@@ -134,6 +171,26 @@ class StimulusPresenter:
             if piece is None:
                 continue
             x, y = self._sq_to_xy(sq)
+            if (
+                piece.piece_type == chess.KING
+                and self._king is not None
+            ):
+                self._king.pos = (x, y)
+                self._king.draw()
+                continue
+            if (
+                piece.piece_type == chess.ROOK
+                and piece.color == chess.WHITE
+                and self._white_rook is not None
+            ):
+                self._white_rook.pos = (x, y)
+                self._white_rook.draw()
+                continue
+            if piece.piece_type == chess.KNIGHT and self._knight is not None:
+                self._knight.pos = (x, y)
+                self._knight.draw()
+                continue
+
             color = (1.0, 1.0, 1.0) if piece.color == chess.WHITE else (-0.84, -0.84, -0.84)
             visual.TextStim(
                 self.win,
