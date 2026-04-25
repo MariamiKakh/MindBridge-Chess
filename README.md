@@ -54,3 +54,17 @@ Controls:
 
 - `Space` manually selects the currently highlighted stimulus for testing.
 - `Esc` or `q` closes the experiment window.
+
+## Web Level Selector
+
+To preview endgame levels in a browser:
+
+```bash
+python scripts/run_web.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/web/
+```

@@ -1,0 +1,576 @@
+const levels = [
+  {
+    id: "two-rooks-mate",
+    title: "Level 1: Two Rooks Mate",
+    tag: "Beginner endgame",
+    description: "Use two separated rooks to restrict the lone black king.",
+    goal: "Practice selecting a rook, choosing a row or column direction, then choosing the final square.",
+    fen: "4k3/8/8/8/4K3/R7/8/1R6 w - - 0 1",
+  },
+  {
+    id: "rook-box",
+    title: "Level 2: Rook Box",
+    tag: "Rook control",
+    description: "One rook and king coordinate to reduce the black king's space.",
+    goal: "Focus on rook movement and direction selection before exact-square selection.",
+    fen: "6k1/8/8/8/4K3/8/8/5R2 w - - 0 1",
+  },
+  {
+    id: "minor-piece-net",
+    title: "Level 3: Minor Piece Net",
+    tag: "Piece coordination",
+    description: "White king, bishop, and knight coordinate against a lone king.",
+    goal: "Preview future levels where bishops and knights are also selectable pieces.",
+    fen: "7k/8/8/8/4K3/8/3B4/6N1 w - - 0 1",
+  },
+  {
+    id: "mixed-endgame",
+    title: "Level 4: Mixed Endgame",
+    tag: "Full visual test",
+    description: "A richer board case for checking piece images and layout.",
+    goal: "Use this level to visually verify kings, rooks, bishops, knights, and pawns.",
+    fen: "4k3/2n5/8/8/4K3/2B5/R6P/1R6 w - - 0 1",
+  },
+];
+
+const pieceImages = {
+  K: "../assets/Figures/KingWhite.png",
+  k: "../assets/Figures/KingBlack.png",
+  R: "../assets/Figures/RookWhite.png",
+  r: "../assets/Figures/RookBlack.png",
+  N: "../assets/Figures/KnightWhite.png",
+  n: "../assets/Figures/KnightBlack.png",
+  B: "../assets/Figures/BishopWhite.png",
+  b: "../assets/Figures/BishopBlack.png",
+  P: "../assets/Figures/PawnWhite.png",
+};
+
+const fallbackPieces = {
+  p: "P",
+  q: "Q",
+  Q: "Q",
+};
+
+const levelScreen = document.querySelector("#level-screen");
+const boardScreen = document.querySelector("#board-screen");
+const levelsContainer = document.querySelector("#levels");
+const mainBoard = document.querySelector("#main-board");
+const backButton = document.querySelector("#back-button");
+const levelTitle = document.querySelector("#level-title");
+const levelDescription = document.querySelector("#level-description");
+const levelGoal = document.querySelector("#level-goal");
+const levelFen = document.querySelector("#level-fen");
+const flowStatus = document.querySelector("#flow-status");
+
+const flashDurationMs = 600;
+const interFlashMs = 500;
+const cyclesPerDecision = 5;
+const startDelayMs = 5000;
+const afterPieceDelayMs = 3000;
+const opponentMoveDelayMs = 1200;
+const opponentHighlightMs = 900;
+
+let currentBoard = [];
+let currentLevel = null;
+let selectedSquare = null;
+let activeRunId = 0;
+let pendingSelection = null;
+let levelSelectionRunId = 0;
+
+function parseFenBoard(fen) {
+  const boardPart = fen.split(" ")[0];
+  const squares = [];
+
+  for (const rank of boardPart.split("/")) {
+    for (const char of rank) {
+      if (Number.isInteger(Number.parseInt(char, 10))) {
+        const emptyCount = Number.parseInt(char, 10);
+        for (let i = 0; i < emptyCount; i += 1) {
+          squares.push(null);
+        }
+      } else {
+        squares.push(char);
+      }
+    }
+  }
+
+  return squares;
+}
+
+function renderBoard(container, fen, { mini = false } = {}) {
+  renderBoardFromSquares(container, parseFenBoard(fen), { mini });
+}
+
+function renderBoardFromSquares(container, squares, { mini = false, highlights = [], selected = null } = {}) {
+  container.innerHTML = "";
+  container.classList.toggle("mini-board", mini);
+  const highlightedSquares = new Set(highlights);
+  if (container === mainBoard && highlights.length > 0) {
+    levelFen.textContent = formatHighlightedSquares(highlights);
+  }
+
+  squares.forEach((piece, index) => {
+    const rankFromTop = Math.floor(index / 8);
+    const file = index % 8;
+    const square = document.createElement("div");
+    square.className = `square ${(rankFromTop + file) % 2 === 0 ? "light" : "dark"}`;
+    if (highlightedSquares.has(index)) {
+      square.classList.add("highlight");
+    }
+    if (selected === index) {
+      square.classList.add("selected");
+    }
+
+    if (piece) {
+      const imagePath = pieceImages[piece];
+      if (imagePath) {
+        const image = document.createElement("img");
+        image.className = "piece";
+        image.src = imagePath;
+        image.alt = piece;
+        square.appendChild(image);
+      } else {
+        const fallback = document.createElement("span");
+        fallback.className = "fallback-piece";
+        fallback.textContent = fallbackPieces[piece] ?? piece.toUpperCase();
+        square.appendChild(fallback);
+      }
+    }
+
+    container.appendChild(square);
+  });
+}
+
+function openLevel(level) {
+  levelSelectionRunId += 1;
+  clearLevelFlash();
+  activeRunId += 1;
+  currentLevel = level;
+  currentBoard = parseFenBoard(level.fen);
+  selectedSquare = null;
+  levelTitle.textContent = level.title;
+  levelDescription.textContent = level.description;
+  levelGoal.textContent = level.goal;
+  levelFen.textContent = "Waiting...";
+  flowStatus.textContent = "Board opened. Flashing starts in 5 seconds.";
+  renderBoardFromSquares(mainBoard, currentBoard);
+  levelScreen.classList.add("hidden");
+  boardScreen.classList.remove("hidden");
+  runBoardFlow(activeRunId);
+}
+
+function renderLevels() {
+  levelsContainer.innerHTML = "";
+
+  for (const level of levels) {
+    const card = document.createElement("button");
+    card.className = "level-card";
+    card.type = "button";
+    card.addEventListener("click", () => openLevel(level));
+
+    const preview = document.createElement("div");
+    preview.className = "chess-board mini-board";
+    renderBoard(preview, level.fen, { mini: true });
+
+    const text = document.createElement("div");
+    text.innerHTML = `
+      <div class="level-meta">${level.tag}</div>
+      <h2>${level.title}</h2>
+      <p>${level.description}</p>
+    `;
+
+    card.append(preview, text);
+    levelsContainer.appendChild(card);
+  }
+}
+
+backButton.addEventListener("click", () => {
+  activeRunId += 1;
+  pendingSelection = null;
+  boardScreen.classList.add("hidden");
+  levelScreen.classList.remove("hidden");
+  startLevelSelectionFlow();
+});
+
+renderLevels();
+startLevelSelectionFlow();
+
+document.addEventListener("keydown", (event) => {
+  if (event.code !== "Space" || !pendingSelection) {
+    return;
+  }
+  event.preventDefault();
+  pendingSelection();
+  pendingSelection = null;
+});
+
+async function runBoardFlow(runId) {
+  await sleep(startDelayMs);
+  if (!isActive(runId)) return;
+
+  while (isActive(runId)) {
+    const movablePieces = getMovableWhitePieces(currentBoard);
+    if (movablePieces.length === 0) {
+      flowStatus.textContent = "No movable white pieces in this level.";
+      return;
+    }
+
+    flowStatus.textContent = "Focus on a white piece. Press Space when it flashes.";
+    const pieceChoice = await flashOptions(
+      movablePieces.map((square) => [square]),
+      runId,
+    );
+    if (pieceChoice === null) return;
+
+    selectedSquare = movablePieces[pieceChoice];
+    renderBoardFromSquares(mainBoard, currentBoard, { selected: selectedSquare });
+    flowStatus.textContent = "Piece selected. Direction or square choices start in 3 seconds.";
+    await sleep(afterPieceDelayMs);
+    if (!isActive(runId)) return;
+
+    const piece = currentBoard[selectedSquare];
+    const moves = getLegalMoves(currentBoard, selectedSquare);
+    if (moves.length === 0) {
+      flowStatus.textContent = "Selected piece has no moves. Restarting piece selection.";
+      selectedSquare = null;
+      continue;
+    }
+
+    let targetSquare;
+    if (piece.toUpperCase() === "R") {
+      targetSquare = await chooseRookTarget(selectedSquare, moves, runId);
+    } else {
+      flowStatus.textContent = "Focus on a destination box. Press Space when it flashes.";
+      const targetChoice = await flashOptions(moves.map((square) => [square]), runId);
+      if (targetChoice === null) return;
+      targetSquare = moves[targetChoice];
+    }
+
+    movePiece(selectedSquare, targetSquare);
+    selectedSquare = null;
+    renderBoardFromSquares(mainBoard, currentBoard);
+    flowStatus.textContent = "White move applied. Opponent is thinking...";
+    await playOpponentTurn(runId);
+    await sleep(800);
+  }
+}
+
+async function playOpponentTurn(runId) {
+  await sleep(opponentMoveDelayMs);
+  if (!isActive(runId)) return;
+
+  const blackMoves = getAllLegalMoves(currentBoard, false);
+  if (blackMoves.length === 0) {
+    flowStatus.textContent = "Opponent has no legal move. White selection starts again.";
+    return;
+  }
+
+  const chosenMove = chooseOpponentMove(blackMoves);
+  flowStatus.textContent = "Opponent move.";
+  renderBoardFromSquares(mainBoard, currentBoard, {
+    highlights: [chosenMove.from, chosenMove.to],
+  });
+  await sleep(opponentHighlightMs);
+  if (!isActive(runId)) return;
+
+  movePiece(chosenMove.from, chosenMove.to);
+  renderBoardFromSquares(mainBoard, currentBoard);
+  flowStatus.textContent = "Opponent moved. Focus on a white piece.";
+}
+
+async function chooseRookTarget(fromSquare, moves, runId) {
+  const directionGroups = getRookDirectionGroups(fromSquare, moves);
+
+  flowStatus.textContent = "Focus on a rook direction. Press Space when that path flashes.";
+  const directionChoice = await flashOptions(directionGroups, runId);
+  if (directionChoice === null) return null;
+
+  const directionSquares = directionGroups[directionChoice];
+  if (directionSquares.length === 1) {
+    return directionSquares[0];
+  }
+
+  flowStatus.textContent = "Focus on the exact box inside that direction. Press Space when it flashes.";
+  const targetChoice = await flashOptions(
+    directionSquares.map((square) => [square]),
+    runId,
+  );
+  if (targetChoice === null) return null;
+  return directionSquares[targetChoice];
+}
+
+async function flashOptions(groups, runId) {
+  for (let cycle = 0; cycle < cyclesPerDecision; cycle += 1) {
+    for (let index = 0; index < groups.length; index += 1) {
+      if (!isActive(runId)) return null;
+
+      renderBoardFromSquares(mainBoard, currentBoard, {
+        highlights: groups[index],
+        selected: selectedSquare,
+      });
+      const selected = await waitForSelectionOrTimeout(flashDurationMs, index, runId);
+      if (selected !== null) {
+        return selected;
+      }
+
+      renderBoardFromSquares(mainBoard, currentBoard, { selected: selectedSquare });
+      await sleep(interFlashMs);
+    }
+  }
+
+  flowStatus.textContent = "No Space selection was made. Repeating this step.";
+  levelFen.textContent = "Waiting...";
+  return flashOptions(groups, runId);
+}
+
+function waitForSelectionOrTimeout(duration, index, runId) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timeoutId = window.setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      if (pendingSelection === chooseCurrent) {
+        pendingSelection = null;
+      }
+      resolve(null);
+    }, duration);
+
+    function chooseCurrent() {
+      if (resolved || !isActive(runId)) return;
+      resolved = true;
+      window.clearTimeout(timeoutId);
+      resolve(index);
+    }
+
+    pendingSelection = chooseCurrent;
+  });
+}
+
+function getMovableWhitePieces(board) {
+  const pieces = [];
+  board.forEach((piece, index) => {
+    if (piece && isWhite(piece) && getLegalMoves(board, index).length > 0) {
+      pieces.push(index);
+    }
+  });
+  return pieces;
+}
+
+function getAllLegalMoves(board, forWhite) {
+  const moves = [];
+  board.forEach((piece, index) => {
+    if (!piece || isWhite(piece) !== forWhite) {
+      return;
+    }
+
+    for (const target of getLegalMoves(board, index)) {
+      moves.push({
+        from: index,
+        to: target,
+        captures: Boolean(board[target]),
+      });
+    }
+  });
+  return moves;
+}
+
+function chooseOpponentMove(moves) {
+  const captures = moves.filter((move) => move.captures);
+  const candidates = captures.length > 0 ? captures : moves;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function getLegalMoves(board, from) {
+  const piece = board[from];
+  if (!piece) return [];
+
+  const type = piece.toUpperCase();
+  if (type === "R") return slidingMoves(board, from, [[0, 1], [1, 0], [0, -1], [-1, 0]]);
+  if (type === "B") return slidingMoves(board, from, [[1, 1], [1, -1], [-1, -1], [-1, 1]]);
+  if (type === "N") return jumpMoves(board, from, [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]);
+  if (type === "K") return jumpMoves(board, from, [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]]);
+  if (type === "P") return pawnMoves(board, from, piece);
+  return [];
+}
+
+function slidingMoves(board, from, directions) {
+  const moves = [];
+  const { file, rank } = indexToCoord(from);
+  const movingWhite = isWhite(board[from]);
+
+  for (const [df, dr] of directions) {
+    let nextFile = file + df;
+    let nextRank = rank + dr;
+    while (isOnBoard(nextFile, nextRank)) {
+      const target = coordToIndex(nextFile, nextRank);
+      const targetPiece = board[target];
+      if (!targetPiece) {
+        moves.push(target);
+      } else {
+        if (isWhite(targetPiece) !== movingWhite) {
+          moves.push(target);
+        }
+        break;
+      }
+      nextFile += df;
+      nextRank += dr;
+    }
+  }
+
+  return moves;
+}
+
+function jumpMoves(board, from, jumps) {
+  const moves = [];
+  const { file, rank } = indexToCoord(from);
+  const movingWhite = isWhite(board[from]);
+
+  for (const [df, dr] of jumps) {
+    const nextFile = file + df;
+    const nextRank = rank + dr;
+    if (!isOnBoard(nextFile, nextRank)) continue;
+    const target = coordToIndex(nextFile, nextRank);
+    const targetPiece = board[target];
+    if (!targetPiece || isWhite(targetPiece) !== movingWhite) {
+      moves.push(target);
+    }
+  }
+
+  return moves;
+}
+
+function pawnMoves(board, from, piece) {
+  const moves = [];
+  const { file, rank } = indexToCoord(from);
+  const direction = isWhite(piece) ? 1 : -1;
+  const forwardRank = rank + direction;
+
+  if (isOnBoard(file, forwardRank)) {
+    const forward = coordToIndex(file, forwardRank);
+    if (!board[forward]) {
+      moves.push(forward);
+    }
+  }
+
+  for (const df of [-1, 1]) {
+    const targetFile = file + df;
+    if (!isOnBoard(targetFile, forwardRank)) continue;
+    const target = coordToIndex(targetFile, forwardRank);
+    if (board[target] && isWhite(board[target]) !== isWhite(piece)) {
+      moves.push(target);
+    }
+  }
+
+  return moves;
+}
+
+function getRookDirectionGroups(fromSquare, moves) {
+  const { file: fromFile, rank: fromRank } = indexToCoord(fromSquare);
+  const groups = {
+    up: [],
+    right: [],
+    down: [],
+    left: [],
+  };
+
+  for (const square of moves) {
+    const { file, rank } = indexToCoord(square);
+    if (file === fromFile && rank > fromRank) groups.up.push(square);
+    if (file > fromFile && rank === fromRank) groups.right.push(square);
+    if (file === fromFile && rank < fromRank) groups.down.push(square);
+    if (file < fromFile && rank === fromRank) groups.left.push(square);
+  }
+
+  return ["up", "right", "down", "left"]
+    .map((direction) => groups[direction].sort((a, b) => distance(fromSquare, a) - distance(fromSquare, b)))
+    .filter((group) => group.length > 0);
+}
+
+function movePiece(from, to) {
+  currentBoard[to] = currentBoard[from];
+  currentBoard[from] = null;
+}
+
+function indexToCoord(index) {
+  return {
+    file: index % 8,
+    rank: 7 - Math.floor(index / 8),
+  };
+}
+
+function formatSquare(index) {
+  const { file, rank } = indexToCoord(index);
+  return `${"abcdefgh"[file]}${rank + 1}`;
+}
+
+function formatHighlightedSquares(squares) {
+  return squares.map((square) => formatSquare(square)).join(", ");
+}
+
+function coordToIndex(file, rank) {
+  return (7 - rank) * 8 + file;
+}
+
+function isOnBoard(file, rank) {
+  return file >= 0 && file < 8 && rank >= 0 && rank < 8;
+}
+
+function isWhite(piece) {
+  return piece === piece.toUpperCase();
+}
+
+function distance(from, to) {
+  const a = indexToCoord(from);
+  const b = indexToCoord(to);
+  return Math.abs(a.file - b.file) + Math.abs(a.rank - b.rank);
+}
+
+function sleep(duration) {
+  return new Promise((resolve) => window.setTimeout(resolve, duration));
+}
+
+function isActive(runId) {
+  return runId === activeRunId && currentLevel !== null;
+}
+
+async function startLevelSelectionFlow() {
+  levelSelectionRunId += 1;
+  const runId = levelSelectionRunId;
+  pendingSelection = null;
+  clearLevelFlash();
+
+  await sleep(800);
+
+  while (runId === levelSelectionRunId && !levelScreen.classList.contains("hidden")) {
+    for (let index = 0; index < levels.length; index += 1) {
+      if (runId !== levelSelectionRunId || levelScreen.classList.contains("hidden")) {
+        clearLevelFlash();
+        return;
+      }
+
+      setFlashingLevel(index);
+      const selected = await waitForSelectionOrTimeout(flashDurationMs, index, runId);
+      if (selected !== null) {
+        clearLevelFlash();
+        openLevel(levels[selected]);
+        return;
+      }
+
+      clearLevelFlash();
+      await sleep(interFlashMs);
+    }
+  }
+}
+
+function setFlashingLevel(index) {
+  const cards = levelsContainer.querySelectorAll(".level-card");
+  cards.forEach((card, cardIndex) => {
+    card.classList.toggle("level-flash", cardIndex === index);
+  });
+}
+
+function clearLevelFlash() {
+  levelsContainer.querySelectorAll(".level-card").forEach((card) => {
+    card.classList.remove("level-flash");
+  });
+}
