@@ -1,0 +1,7 @@
+unicornpy>=0.1
+psychopy>=2023.2
+mne>=1.0
+python-chess>=2.0
+scikit-learn>=1.3
+numpy>=1.26
+pandas>=2.1

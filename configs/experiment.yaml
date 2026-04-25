@@ -1,0 +1,15 @@
+stimulus:
+  flash_duration_ms: 100
+  inter_flash_ms: 75
+  cycles_per_decision: 3
+
+eeg:
+  sample_rate: 250
+  pz_channel_index: 4   # Fz=0  C3=1  Cz=2  C4=3  Pz=4  PO7=5  Oz=6  PO8=7
+
+classifier:
+  p300_window_ms: [250, 500]
+  baseline_window_ms: [-100, 0]
+
+exercise:
+  fen: "4k3/8/8/8/4K3/8/8/RR6 w - - 0 1"
