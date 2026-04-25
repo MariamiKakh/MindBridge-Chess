@@ -24,6 +24,10 @@ class ChessBoard:
         """Return list of chess.Square for every white rook still on the board."""
         return list(self.board.pieces(chess.ROOK, chess.WHITE))
 
+    def get_movable_white_piece_squares(self) -> list:
+        """Return white pieces that currently have at least one legal move."""
+        return sorted({m.from_square for m in self.board.legal_moves})
+
     def get_legal_moves_for_square(self, square: chess.Square) -> list:
         """Return all legal moves whose origin is *square*."""
         return [m for m in self.board.legal_moves if m.from_square == square]

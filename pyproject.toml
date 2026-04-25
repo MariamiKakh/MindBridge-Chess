@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 authors = [ { name = "MindBridge Team" } ]
 dependencies = [
-    "unicornpy>=0.1",
     "psychopy>=2023.2",
     "mne>=1.0",
     "python-chess>=2.0",

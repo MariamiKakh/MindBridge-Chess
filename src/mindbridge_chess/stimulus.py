@@ -16,9 +16,21 @@ _LIGHT  = ( 0.64,  0.09, -0.44)   # warm beige
 _DARK   = (-0.40, -0.63, -0.78)   # dark brown
 _FLASH  = ( 1.00,  1.00, -1.00)   # bright yellow
 _WIN_BG = (-0.69, -0.69, -0.69)   # dark grey
-_KING_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingBlack.png"
+_KING_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingBlack.png"
+_KING_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingWhite.png"
 _ROOK_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "RookWhite.png"
 _KNIGHT_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "figures" / "knight.png"
+
+
+class ExperimentStopped(Exception):
+    """Raised when the user asks to stop the experiment window."""
+
+
+class ManualSelection(Exception):
+    """Raised when the user manually selects the highlighted stimulus."""
+
+    def __init__(self, stimulus_index: int):
+        self.stimulus_index = stimulus_index
 
 
 class StimulusPresenter:
@@ -39,7 +51,8 @@ class StimulusPresenter:
             allowGUI=True,
         )
         self._rects: dict = {}   # chess.Square -> (Rect, base_color_tuple)
-        self._king = self._init_king_image()
+        self._black_king = self._init_image(_KING_BLACK_IMAGE, (_SQ * 0.72, _SQ * 0.72))
+        self._white_king = self._init_image(_KING_WHITE_IMAGE, (_SQ * 0.72, _SQ * 0.72))
         self._white_rook = self._init_white_rook_image()
         self._knight = self._init_knight_image()
         self._init_rects()
@@ -50,8 +63,16 @@ class StimulusPresenter:
 
     def draw_board(self, board: chess.Board) -> None:
         """Render the current board position and flip."""
+        self._check_for_exit()
         self._draw_base(board)
         self.win.flip()
+
+    def wait(self, duration: float, selection_index: int = None) -> None:
+        """Wait while still responding to exit keys."""
+        end_time = time.time() + duration
+        while time.time() < end_time:
+            self._check_for_keys(selection_index)
+            core.wait(min(0.02, end_time - time.time()))
 
     def flash_squares(self, board: chess.Board, squares: list) -> list:
         """
@@ -64,20 +85,42 @@ class StimulusPresenter:
         log: list = []
         for _cycle in range(self._cycles):
             for i, sq in enumerate(squares):
+                self._check_for_exit()
+
                 # --- flash ON ---
                 self._draw_base(board, highlight_sq=sq)
                 ts = time.time()
                 self.win.flip()
                 log.append((i, ts))
-                core.wait(self._flash_dur)
+                self.wait(self._flash_dur, selection_index=i)
 
                 # --- flash OFF ---
                 self._draw_base(board)
                 self.win.flip()
-                core.wait(self._ifi)
+                self.wait(self._ifi)
+        return log
 
-                if event.getKeys(['escape']):
-                    return log
+    def flash_square_groups(self, board: chess.Board, square_groups: list) -> list:
+        """
+        Flash groups of squares one at a time.
+
+        Used for rook direction selection, where each stimulus is a whole row or
+        column path instead of a single destination square.
+        """
+        log: list = []
+        for _cycle in range(self._cycles):
+            for i, squares in enumerate(square_groups):
+                self._check_for_exit()
+
+                self._draw_base(board, highlight_squares=squares)
+                ts = time.time()
+                self.win.flip()
+                log.append((i, ts))
+                self.wait(self._flash_dur, selection_index=i)
+
+                self._draw_base(board)
+                self.win.flip()
+                self.wait(self._ifi)
         return log
 
     def show_message(
@@ -87,6 +130,7 @@ class StimulusPresenter:
         duration: float = 4.0,
     ) -> None:
         """Display a text overlay (optionally on top of a board position)."""
+        self._check_for_exit()
         if board is not None:
             self._draw_base(board)
         visual.TextStim(
@@ -99,7 +143,7 @@ class StimulusPresenter:
             bold=True,
         ).draw()
         self.win.flip()
-        core.wait(duration)
+        self.wait(duration)
 
     def close(self) -> None:
         self.win.close()
@@ -107,6 +151,16 @@ class StimulusPresenter:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _check_for_exit(self) -> None:
+        self._check_for_keys()
+
+    def _check_for_keys(self, selection_index: int = None) -> None:
+        keys = event.getKeys(keyList=['escape', 'q', 'space'])
+        if 'escape' in keys or 'q' in keys:
+            raise ExperimentStopped()
+        if selection_index is not None and 'space' in keys:
+            raise ManualSelection(selection_index)
 
     def _sq_to_xy(self, sq: int) -> tuple:
         file = chess.square_file(sq)
@@ -130,13 +184,13 @@ class StimulusPresenter:
             )
             self._rects[sq] = (rect, base)
 
-    def _init_king_image(self):
-        if not _KING_IMAGE.exists():
+    def _init_image(self, path: Path, size: tuple):
+        if not path.exists():
             return None
         return visual.ImageStim(
             self.win,
-            image=str(_KING_IMAGE),
-            size=(_SQ * 0.72, _SQ * 0.72),
+            image=str(path),
+            size=size,
             units='pix',
         )
 
@@ -160,10 +214,14 @@ class StimulusPresenter:
             units='pix',
         )
 
-    def _draw_base(self, board: chess.Board, highlight_sq=None) -> None:
+    def _draw_base(self, board: chess.Board, highlight_sq=None, highlight_squares=None) -> None:
         """Draw all squares + pieces without flipping."""
+        highlights = set(highlight_squares or [])
+        if highlight_sq is not None:
+            highlights.add(highlight_sq)
+
         for sq, (rect, base) in self._rects.items():
-            rect.fillColor = _FLASH if sq == highlight_sq else base
+            rect.fillColor = _FLASH if sq in highlights else base
             rect.draw()
 
         for sq in chess.SQUARES:
@@ -173,10 +231,14 @@ class StimulusPresenter:
             x, y = self._sq_to_xy(sq)
             if (
                 piece.piece_type == chess.KING
-                and self._king is not None
+                and (
+                    (piece.color == chess.WHITE and self._white_king is not None)
+                    or (piece.color == chess.BLACK and self._black_king is not None)
+                )
             ):
-                self._king.pos = (x, y)
-                self._king.draw()
+                king = self._white_king if piece.color == chess.WHITE else self._black_king
+                king.pos = (x, y)
+                king.draw()
                 continue
             if (
                 piece.piece_type == chess.ROOK
