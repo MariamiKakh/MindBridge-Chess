@@ -8,7 +8,48 @@
   </head>
   <body>
     <main class="app-shell">
-      <section id="level-screen" class="screen">
+      <section id="calibration-screen" class="screen">
+        <div class="hero">
+          <p class="eyebrow brand-mark">MindGambit</p>
+          <h1>Calibration</h1>
+          <p id="calibration-instruction">
+            Preparing the system. Please wait...
+          </p>
+        </div>
+
+        <div class="board-layout">
+          <div class="board-shell">
+            <div id="calibration-board-message" class="board-message hidden"></div>
+            <div id="calibration-board" class="chess-board large-board" aria-label="Calibration board"></div>
+            <div class="file-labels" aria-hidden="true">
+              <span>a</span>
+              <span>b</span>
+              <span>c</span>
+              <span>d</span>
+              <span>e</span>
+              <span>f</span>
+              <span>g</span>
+              <span>h</span>
+            </div>
+            <div class="rank-labels" aria-hidden="true">
+              <span>8</span>
+              <span>7</span>
+              <span>6</span>
+              <span>5</span>
+              <span>4</span>
+              <span>3</span>
+              <span>2</span>
+              <span>1</span>
+            </div>
+          </div>
+          <aside class="level-panel">
+            <h2>Status</h2>
+            <p id="calibration-status">Initializing calibration...</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="level-screen" class="screen hidden">
         <div class="hero">
           <p class="eyebrow brand-mark">MindGambit</p>
           <h1>Choose an Endgame Level</h1>

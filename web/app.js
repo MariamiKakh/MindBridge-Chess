@@ -33,6 +33,20 @@ const levels = [
   },
 ];
 
+const calibrationSquares = [
+  { label: "upper_left", square: 9 },   // B7
+  { label: "upper_right", square: 14 }, // G7
+  { label: "lower_left", square: 49 },  // B2
+  { label: "lower_right", square: 54 }, // G2
+];
+
+const calibrationTargetPlan = [
+  { label: "upper_right", cycles: 3 },
+  { label: "upper_left", cycles: 2 },
+  { label: "lower_left", cycles: 3 },
+  { label: "lower_right", cycles: 2 },
+];
+
 const pieceImages = {
   K: "../assets/Figures/KingWhite.png",
   k: "../assets/Figures/KingBlack.png",
@@ -53,8 +67,11 @@ const fallbackPieces = {
 
 const levelScreen = document.querySelector("#level-screen");
 const boardScreen = document.querySelector("#board-screen");
+const calibrationScreen = document.querySelector("#calibration-screen");
 const levelsContainer = document.querySelector("#levels");
 const mainBoard = document.querySelector("#main-board");
+const calibrationBoard = document.querySelector("#calibration-board");
+const calibrationBoardMessage = document.querySelector("#calibration-board-message");
 const backButton = document.querySelector("#back-button");
 const startOverButton = document.querySelector("#start-over-button");
 const levelTitle = document.querySelector("#level-title");
@@ -62,6 +79,8 @@ const levelDescription = document.querySelector("#level-description");
 const levelGoal = document.querySelector("#level-goal");
 const levelFen = document.querySelector("#level-fen");
 const flowStatus = document.querySelector("#flow-status");
+const calibrationInstruction = document.querySelector("#calibration-instruction");
+const calibrationStatus = document.querySelector("#calibration-status");
 const winCelebration = document.querySelector("#win-celebration");
 const celebrationKicker = document.querySelector("#celebration-kicker");
 const celebrationTitle = document.querySelector("#celebration-title");
@@ -74,6 +93,8 @@ const startDelayMs = 5000;
 const afterPieceDelayMs = 3000;
 const opponentMoveDelayMs = 1200;
 const opponentHighlightMs = 900;
+const calibrationCycles = 10;
+const calibrationInstructionSeconds = 4;
 
 let currentBoard = [];
 let currentLevel = null;
@@ -218,7 +239,7 @@ function startOverLevel() {
 }
 
 renderLevels();
-startLevelSelectionFlow();
+startCalibrationFlow();
 
 document.addEventListener("keydown", (event) => {
   if (event.code !== "Space") {
@@ -854,4 +875,63 @@ function clearLevelFlash() {
   levelsContainer.querySelectorAll(".level-card").forEach((card) => {
     card.classList.remove("level-flash");
   });
+}
+
+async function startCalibrationFlow() {
+  calibrationScreen.classList.remove("hidden");
+  levelScreen.classList.add("hidden");
+  boardScreen.classList.add("hidden");
+
+  const emptyBoard = Array(64).fill(null);
+  renderBoardFromSquares(calibrationBoard, emptyBoard);
+
+  calibrationInstruction.textContent = "Click space to start calibration";
+  calibrationStatus.textContent = "Initializing calibration...";
+
+  // Wait for space press
+  await new Promise((resolve) => {
+    const handler = (event) => {
+      if (event.code === "Space") {
+        event.preventDefault();
+        document.removeEventListener("keydown", handler);
+        resolve();
+      }
+    };
+    document.addEventListener("keydown", handler);
+  });
+
+  // Shuffle the target plan
+  const shuffledPlan = [...calibrationTargetPlan].sort(() => Math.random() - 0.5);
+
+  let cycleOffset = 0;
+  for (const target of shuffledPlan) {
+    const targetSquare = calibrationSquares.find(s => s.label === target.label).square;
+    const message = `Calibration:\nFocus ${target.label.replace("_", " ").toUpperCase()}`;
+    calibrationBoardMessage.textContent = message;
+    calibrationBoardMessage.classList.remove("hidden");
+    calibrationStatus.textContent = `Focusing on ${target.label.replace("_", " ")}`;
+    renderBoardFromSquares(calibrationBoard, emptyBoard, { highlights: [targetSquare] });
+    await sleep(2000);
+    calibrationBoardMessage.classList.add("hidden");
+
+    // Flash the groups
+    for (let cycle = 0; cycle < target.cycles; cycle++) {
+      for (const square of calibrationSquares) {
+        const isTarget = square.label === target.label;
+        renderBoardFromSquares(calibrationBoard, emptyBoard, { highlights: [square.square] });
+        await sleep(flashDurationMs);
+        renderBoardFromSquares(calibrationBoard, emptyBoard);
+        await sleep(interFlashMs);
+      }
+    }
+    cycleOffset += target.cycles;
+  }
+
+  calibrationInstruction.textContent = "Calibration complete.";
+  calibrationStatus.textContent = "System ready. Proceeding to level selection...";
+  await sleep(2000);
+
+  calibrationScreen.classList.add("hidden");
+  levelScreen.classList.remove("hidden");
+  startLevelSelectionFlow();
 }
