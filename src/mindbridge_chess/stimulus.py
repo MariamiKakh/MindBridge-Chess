@@ -99,6 +99,13 @@ class StimulusPresenter:
         self.win.flip()
         self._push_marker("board_draw")
 
+    def draw_calibration_board(self, board: chess.Board) -> None:
+        """Render only the board for calibration, without game UI panels."""
+        self._check_for_exit()
+        self._draw_calibration_base(board)
+        self.win.flip()
+        self._push_marker("calibration_board_draw")
+
     def set_current_level(self, level: dict) -> None:
         """Store level metadata for the board-side information panel."""
         self._current_level = level
@@ -207,11 +214,13 @@ class StimulusPresenter:
         cycles: int,
         target_label: str,
         marker_prefix: str,
+        start_cycle: int = 0,
     ) -> list:
         """Flash labeled square groups and mark target/non-target events for calibration."""
         log: list = []
         for cycle in range(cycles):
-            self._push_marker(f"{marker_prefix}_cycle_start;cycle={cycle + 1}")
+            display_cycle = start_cycle + cycle + 1
+            self._push_marker(f"{marker_prefix}_cycle_start;cycle={display_cycle};target={target_label}")
             cycle_groups = list(labeled_square_groups)
             random.shuffle(cycle_groups)
             for i, (label, squares) in enumerate(cycle_groups):
@@ -219,26 +228,55 @@ class StimulusPresenter:
                 square_names = ",".join(chess.square_name(sq) for sq in squares)
                 target = int(label == target_label)
 
-                self._draw_base(board, highlight_squares=squares)
+                self._draw_calibration_base(board, highlight_squares=squares)
                 self.win.callOnFlip(
                     self._push_marker,
-                    f"{marker_prefix}_flash_on;box={label};index={i};cycle={cycle + 1};"
+                    f"{marker_prefix}_flash_on;box={label};index={i};cycle={display_cycle};"
                     f"target={target};squares={square_names}",
                 )
                 ts = time.time()
                 self.win.flip()
-                log.append((i, ts, label, cycle + 1, target))
+                log.append((i, ts, label, display_cycle, target))
                 self.wait(self._flash_dur)
 
-                self._draw_base(board)
+                self._draw_calibration_base(board)
                 self.win.callOnFlip(
                     self._push_marker,
-                    f"{marker_prefix}_flash_off;box={label};index={i};cycle={cycle + 1};"
+                    f"{marker_prefix}_flash_off;box={label};index={i};cycle={display_cycle};"
                     f"target={target};squares={square_names}",
                 )
                 self.win.flip()
                 self.wait(self._ifi)
         return log
+
+    def show_calibration_message(self, text: str, board: chess.Board, duration: float = 4.0) -> None:
+        """Show a calibration instruction over the clean board only."""
+        self._check_for_exit()
+        self._draw_calibration_base(board)
+        visual.Rect(
+            self.win,
+            width=560,
+            height=160,
+            pos=(0, 0),
+            fillColor=_PANEL,
+            lineColor=_ACCENT,
+            lineWidth=2,
+            opacity=0.94,
+            colorSpace='rgb',
+        ).draw()
+        visual.TextStim(
+            self.win,
+            text=text,
+            pos=(0, 0),
+            color=_ACCENT,
+            colorSpace='rgb',
+            height=52,
+            bold=True,
+            wrapWidth=500,
+        ).draw()
+        self.win.callOnFlip(self._push_marker, f"message;value={text}")
+        self.win.flip()
+        self.wait(duration)
 
     def draw_level_selector(self, levels: list) -> None:
         """Show available levels before P300 level selection starts."""
@@ -690,6 +728,31 @@ class StimulusPresenter:
     def _format_highlights(self, highlights: set) -> str:
         names = [chess.square_name(square) for square in sorted(highlights)]
         return ", ".join(names)
+
+    def _draw_calibration_base(self, board: chess.Board, highlight_squares=None) -> None:
+        """Draw a clean board only for calibration flashes."""
+        self._draw_background()
+        self._draw_board_shell()
+        highlights = set(highlight_squares or [])
+        for sq, (rect, base) in self._rects.items():
+            rect.fillColor = _FLASH if sq in highlights else base
+            rect.draw()
+
+        for sq in chess.SQUARES:
+            piece = board.piece_at(sq)
+            if piece is None:
+                continue
+            x, y = self._sq_to_xy(sq)
+            color = (1.0, 1.0, 1.0) if piece.color == chess.WHITE else (-0.84, -0.84, -0.84)
+            visual.TextStim(
+                self.win,
+                text=piece.symbol().upper(),
+                pos=(x, y),
+                color=color,
+                colorSpace='rgb',
+                height=int(_SQ * 0.65),
+                bold=True,
+            ).draw()
 
     def _draw_base(self, board: chess.Board, highlight_sq=None, highlight_squares=None) -> None:
         """Draw all squares + pieces without flipping."""

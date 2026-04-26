@@ -1,5 +1,6 @@
 """2 Rooks vs Lone King checkmate exercise — single end-to-end BCI pipeline test."""
 
+import random
 import chess
 import numpy as np
 
@@ -53,7 +54,12 @@ _POST_MOVE_DELAY_SECONDS = 3.0
 _OPPONENT_MOVE_DELAY_SECONDS = 1.2
 _OPPONENT_HIGHLIGHT_SECONDS = 0.9
 _CALIBRATION_CYCLES = 10
-_CALIBRATION_TARGET_BOX = "top_right"
+_CALIBRATION_TARGET_PLAN = [
+    ("top_right", 3),
+    ("top_left", 2),
+    ("bottom_left", 3),
+    ("bottom_right", 2),
+]
 _CALIBRATION_INSTRUCTION_SECONDS = 4.0
 _PZ_CH    = 4   # Pz channel index: Fz=0 C3=1 Cz=2 C4=3 Pz=4 PO7=5 Oz=6 PO8=7
 _P300_CHANNELS = [4, 6, 2]  # Pz primary, with Oz/Cz as supporting channels
@@ -116,27 +122,48 @@ class RookCheckmateExercise:
         """Run an empty-board P300 marker check before the chess exercise."""
         empty_board = chess.Board(None)
         groups = self._calibration_square_groups()
+        target_plan = list(_CALIBRATION_TARGET_PLAN)
+        random.shuffle(target_plan)
+        target_plan_marker = ",".join(f"{label}:{cycles}" for label, cycles in target_plan)
 
         self.presenter.send_marker(
-            f"calibration_start;cycles={_CALIBRATION_CYCLES};target={_CALIBRATION_TARGET_BOX}"
+            f"calibration_start;cycles={_CALIBRATION_CYCLES};target_plan={target_plan_marker}"
         )
-        self.presenter.draw_board(empty_board)
-        self.presenter.show_message(
-            "Calibration:\nwatch TOP RIGHT",
-            board=empty_board,
-            duration=_CALIBRATION_INSTRUCTION_SECONDS,
-        )
+        self.presenter.draw_calibration_board(empty_board)
         self.eeg.clear()
         self.presenter.wait(0.2)
-        flash_log = self.presenter.flash_labeled_square_groups(
-            empty_board,
-            groups,
-            cycles=_CALIBRATION_CYCLES,
-            target_label=_CALIBRATION_TARGET_BOX,
-            marker_prefix="calibration",
-        )
+
+        flash_log = []
+        cycle_offset = 0
+        for target_label, cycles in target_plan:
+            self.presenter.send_marker(
+                f"calibration_target_start;target={target_label};cycles={cycles};"
+                f"start_cycle={cycle_offset + 1}"
+            )
+            self.presenter.show_calibration_message(
+                f"Calibration:\nwatch {self._format_calibration_target(target_label)}",
+                board=empty_board,
+                duration=_CALIBRATION_INSTRUCTION_SECONDS,
+            )
+            block_log = self.presenter.flash_labeled_square_groups(
+                empty_board,
+                groups,
+                cycles=cycles,
+                target_label=target_label,
+                marker_prefix="calibration",
+                start_cycle=cycle_offset,
+            )
+            flash_log.extend(block_log)
+            cycle_offset += cycles
+            self.presenter.send_marker(
+                f"calibration_target_end;target={target_label};end_cycle={cycle_offset}"
+            )
+
         self._fit_calibration(flash_log)
-        self.presenter.send_marker(f"calibration_end;target={_CALIBRATION_TARGET_BOX}")
+        self.presenter.send_marker(f"calibration_end;target_plan={target_plan_marker}")
+
+    def _format_calibration_target(self, label: str) -> str:
+        return label.replace("_", " ").upper()
 
     def _calibration_square_groups(self) -> list:
         """Return four individual board squares for calibration flashing."""
