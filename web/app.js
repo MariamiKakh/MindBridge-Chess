@@ -19,9 +19,9 @@ const levels = [
     id: "minor-piece-net",
     title: "Level 3: Minor Piece Brigade",
     tag: "Bishops & knights",
-    description: "Two bishops and two knights join the king to hem in the black king and a pawn.",
+    description: "Two bishops and two knights join the king to hem in the black king and a pawn. The bishops stand on light and dark squares (as in a real game).",
     goal: "Switch between knight jumps, bishop diagonals, and king steps while the board stays crowded.",
-    fen: "7k/8/6p1/8/2NK1B2/8/3B1N2/8 w - - 0 1",
+    fen: "7k/8/6p1/1B4B1/4K3/2N3N1/8/8 w - - 0 1",
   },
   {
     id: "mixed-endgame",
@@ -121,8 +121,9 @@ function renderBoardFromSquares(container, squares, { mini = false, highlights =
   squares.forEach((piece, index) => {
     const rankFromTop = Math.floor(index / 8);
     const file = index % 8;
+    const rankFromBottom = 7 - rankFromTop;
     const square = document.createElement("div");
-    square.className = `square ${(rankFromTop + file) % 2 === 0 ? "light" : "dark"}`;
+    square.className = `square ${(file + rankFromBottom) % 2 === 0 ? "light" : "dark"}`;
     if (highlightedSquares.has(index)) {
       square.classList.add("highlight");
     }
