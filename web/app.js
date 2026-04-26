@@ -81,6 +81,7 @@ const levelFen = document.querySelector("#level-fen");
 const flowStatus = document.querySelector("#flow-status");
 const calibrationInstruction = document.querySelector("#calibration-instruction");
 const calibrationStatus = document.querySelector("#calibration-status");
+const calibrationWelcome = document.querySelector("#calibration-welcome");
 const winCelebration = document.querySelector("#win-celebration");
 const celebrationKicker = document.querySelector("#celebration-kicker");
 const celebrationTitle = document.querySelector("#celebration-title");
@@ -103,6 +104,14 @@ let activeRunId = 0;
 let pendingSelection = null;
 let levelSelectionRunId = 0;
 let navigationSelectionRunId = 0;
+let autoAdvanceTimer = null;
+
+function clearAutoAdvanceTimer() {
+  if (autoAdvanceTimer !== null) {
+    window.clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = null;
+  }
+}
 
 function parseFenBoard(fen) {
   const boardPart = fen.split(" ")[0];
@@ -169,6 +178,7 @@ function renderBoardFromSquares(container, squares, { mini = false, highlights =
 }
 
 function openLevel(level) {
+  clearAutoAdvanceTimer();
   levelSelectionRunId += 1;
   clearLevelFlash();
   activeRunId += 1;
@@ -218,6 +228,7 @@ backButton.addEventListener("click", goBackToLevels);
 startOverButton.addEventListener("click", startOverLevel);
 
 function goBackToLevels() {
+  clearAutoAdvanceTimer();
   activeRunId += 1;
   navigationSelectionRunId += 1;
   pendingSelection = null;
@@ -231,6 +242,7 @@ function goBackToLevels() {
 
 function startOverLevel() {
   if (!currentLevel) return;
+  clearAutoAdvanceTimer();
   navigationSelectionRunId += 1;
   pendingSelection = null;
   blurBoardActionButtons();
@@ -457,6 +469,27 @@ function showWinCelebration() {
   levelFen.textContent = "Victory";
   celebrationKicker.textContent = "Checkmate";
   celebrationTitle.textContent = "You Won!";
+
+  const wonLevel = currentLevel;
+  const idx = wonLevel ? levels.findIndex((l) => l.id === wonLevel.id) : -1;
+  const nextLevel = idx >= 0 && idx < levels.length - 1 ? levels[idx + 1] : null;
+
+  if (nextLevel) {
+    celebrationMessage.textContent = `Level complete. Next: ${nextLevel.title} — starting in a moment…`;
+    winCelebration.classList.remove("hidden");
+    navigationSelectionRunId += 1;
+    clearNavigationFlash();
+    clearAutoAdvanceTimer();
+    const fromId = wonLevel.id;
+    autoAdvanceTimer = window.setTimeout(() => {
+      autoAdvanceTimer = null;
+      if (!currentLevel || currentLevel.id !== fromId) return;
+      hideWinCelebration();
+      openLevel(nextLevel);
+    }, 2800);
+    return;
+  }
+
   celebrationMessage.textContent = "Beautiful finish. Return to levels when you are ready.";
   winCelebration.classList.remove("hidden");
   startNavigationChoiceFlow();
@@ -885,20 +918,23 @@ async function startCalibrationFlow() {
   const emptyBoard = Array(64).fill(null);
   renderBoardFromSquares(calibrationBoard, emptyBoard);
 
-  calibrationInstruction.textContent = "Click space to start calibration";
-  calibrationStatus.textContent = "Initializing calibration...";
+  calibrationWelcome.classList.remove("hidden");
+  calibrationInstruction.textContent = "When you are ready, press Space on the welcome card.";
+  calibrationStatus.textContent = "Introduction";
 
-  // Wait for space press
   await new Promise((resolve) => {
     const handler = (event) => {
-      if (event.code === "Space") {
-        event.preventDefault();
-        document.removeEventListener("keydown", handler);
-        resolve();
-      }
+      if (event.code !== "Space") return;
+      event.preventDefault();
+      document.removeEventListener("keydown", handler);
+      calibrationWelcome.classList.add("hidden");
+      resolve();
     };
     document.addEventListener("keydown", handler);
   });
+
+  calibrationInstruction.textContent = "Watch the board — calibration is running.";
+  calibrationStatus.textContent = "Initializing calibration...";
 
   // Shuffle the target plan
   const shuffledPlan = [...calibrationTargetPlan].sort(() => Math.random() - 0.5);

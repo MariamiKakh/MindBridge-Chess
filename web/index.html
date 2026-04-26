@@ -4,11 +4,43 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MindBridge Chess Levels</title>
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
   </head>
   <body>
     <main class="app-shell">
       <section id="calibration-screen" class="screen">
+        <div
+          id="calibration-welcome"
+          class="calibration-welcome"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="welcome-heading"
+        >
+          <div class="calibration-welcome-card">
+            <p class="welcome-kicker">Welcome</p>
+            <h2 id="welcome-heading" class="welcome-title">Hello — this is MindGambit</h2>
+            <div class="welcome-body">
+              <p class="welcome-lead">
+                Play focused chess <strong>endgame exercises</strong> with your mind, using the
+                <strong class="welcome-device">Unicorn Hybrid Black</strong> EEG system.
+              </p>
+              <p>
+                For reliable, high-accuracy control, we start with a short
+                <strong>calibration</strong> so the system learns your responses.
+              </p>
+              <p class="welcome-steps-label">During the game you will:</p>
+              <ol class="welcome-steps">
+                <li>Attend to the <strong>piece</strong> you want to move</li>
+                <li>Then the <strong>direction</strong> (for rooks, a path; for others, the target)</li>
+                <li>Then the <strong>square</strong> where it should land</li>
+              </ol>
+            </div>
+            <p class="welcome-dismiss">
+              Press <kbd class="welcome-kbd">Space</kbd> to close this message and begin calibration
+            </p>
+          </div>
+        </div>
+
         <div class="hero">
           <p class="eyebrow brand-mark">MindGambit</p>
           <h1>Calibration</h1>
@@ -121,6 +153,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=14"></script>
   </body>
 </html>
