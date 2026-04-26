@@ -56,11 +56,16 @@ const boardScreen = document.querySelector("#board-screen");
 const levelsContainer = document.querySelector("#levels");
 const mainBoard = document.querySelector("#main-board");
 const backButton = document.querySelector("#back-button");
+const startOverButton = document.querySelector("#start-over-button");
 const levelTitle = document.querySelector("#level-title");
 const levelDescription = document.querySelector("#level-description");
 const levelGoal = document.querySelector("#level-goal");
 const levelFen = document.querySelector("#level-fen");
 const flowStatus = document.querySelector("#flow-status");
+const winCelebration = document.querySelector("#win-celebration");
+const celebrationKicker = document.querySelector("#celebration-kicker");
+const celebrationTitle = document.querySelector("#celebration-title");
+const celebrationMessage = document.querySelector("#celebration-message");
 
 const flashDurationMs = 600;
 const interFlashMs = 500;
@@ -76,6 +81,7 @@ let selectedSquare = null;
 let activeRunId = 0;
 let pendingSelection = null;
 let levelSelectionRunId = 0;
+let navigationSelectionRunId = 0;
 
 function parseFenBoard(fen) {
   const boardPart = fen.split(" ")[0];
@@ -145,6 +151,8 @@ function openLevel(level) {
   levelSelectionRunId += 1;
   clearLevelFlash();
   activeRunId += 1;
+  navigationSelectionRunId += 1;
+  clearNavigationFlash();
   currentLevel = level;
   currentBoard = parseFenBoard(level.fen);
   selectedSquare = null;
@@ -152,6 +160,7 @@ function openLevel(level) {
   levelDescription.textContent = level.description;
   levelGoal.textContent = level.goal;
   levelFen.textContent = "Waiting...";
+  hideWinCelebration();
   flowStatus.textContent = "Board opened. Flashing starts in 5 seconds.";
   renderBoardFromSquares(mainBoard, currentBoard);
   levelScreen.classList.add("hidden");
@@ -184,22 +193,41 @@ function renderLevels() {
   }
 }
 
-backButton.addEventListener("click", () => {
+backButton.addEventListener("click", goBackToLevels);
+startOverButton.addEventListener("click", startOverLevel);
+
+function goBackToLevels() {
   activeRunId += 1;
+  navigationSelectionRunId += 1;
   pendingSelection = null;
+  blurBoardActionButtons();
+  clearNavigationFlash();
+  hideWinCelebration();
   boardScreen.classList.add("hidden");
   levelScreen.classList.remove("hidden");
   startLevelSelectionFlow();
-});
+}
+
+function startOverLevel() {
+  if (!currentLevel) return;
+  navigationSelectionRunId += 1;
+  pendingSelection = null;
+  blurBoardActionButtons();
+  clearNavigationFlash();
+  openLevel(currentLevel);
+}
 
 renderLevels();
 startLevelSelectionFlow();
 
 document.addEventListener("keydown", (event) => {
-  if (event.code !== "Space" || !pendingSelection) {
+  if (event.code !== "Space") {
     return;
   }
   event.preventDefault();
+  if (!pendingSelection) {
+    return;
+  }
   pendingSelection();
   pendingSelection = null;
 });
@@ -209,7 +237,7 @@ async function runBoardFlow(runId) {
   if (!isActive(runId)) return;
 
   while (isActive(runId)) {
-    const movablePieces = getMovableWhitePieces(currentBoard);
+    const movablePieces = getSelectableWhitePieces(currentBoard);
     if (movablePieces.length === 0) {
       flowStatus.textContent = "No movable white pieces in this level.";
       return;
@@ -229,7 +257,7 @@ async function runBoardFlow(runId) {
     if (!isActive(runId)) return;
 
     const piece = currentBoard[selectedSquare];
-    const moves = getLegalMoves(currentBoard, selectedSquare);
+    const moves = getSelectableMoves(currentBoard, selectedSquare);
     if (moves.length === 0) {
       flowStatus.textContent = "Selected piece has no moves. Restarting piece selection.";
       selectedSquare = null;
@@ -249,8 +277,22 @@ async function runBoardFlow(runId) {
     movePiece(selectedSquare, targetSquare);
     selectedSquare = null;
     renderBoardFromSquares(mainBoard, currentBoard);
+    const blackStatus = getGameStatus(currentBoard, false);
+    if (blackStatus === "insufficient-material") {
+      showDrawMessage("Insufficient Material", "Only kings are left. Choose what to do next.");
+      return;
+    }
+    if (blackStatus === "checkmate") {
+      showWinCelebration();
+      return;
+    }
+    if (blackStatus === "stalemate") {
+      showDrawMessage();
+      return;
+    }
     flowStatus.textContent = "White move applied. Opponent is thinking...";
-    await playOpponentTurn(runId);
+    const shouldContinue = await playOpponentTurn(runId);
+    if (!shouldContinue) return;
     await sleep(800);
   }
 }
@@ -261,8 +303,12 @@ async function playOpponentTurn(runId) {
 
   const blackMoves = getAllLegalMoves(currentBoard, false);
   if (blackMoves.length === 0) {
-    flowStatus.textContent = "Opponent has no legal move. White selection starts again.";
-    return;
+    if (isInCheck(currentBoard, false)) {
+      showWinCelebration();
+    } else {
+      showDrawMessage();
+    }
+    return false;
   }
 
   const chosenMove = chooseOpponentMove(blackMoves);
@@ -275,7 +321,12 @@ async function playOpponentTurn(runId) {
 
   movePiece(chosenMove.from, chosenMove.to);
   renderBoardFromSquares(mainBoard, currentBoard);
+  if (getGameStatus(currentBoard, true) === "insufficient-material") {
+    showDrawMessage("Insufficient Material", "Only kings are left. Choose what to do next.");
+    return false;
+  }
   flowStatus.textContent = "Opponent moved. Focus on a white piece.";
+  return true;
 }
 
 async function chooseRookTarget(fromSquare, moves, runId) {
@@ -346,14 +397,18 @@ function waitForSelectionOrTimeout(duration, index, runId) {
   });
 }
 
-function getMovableWhitePieces(board) {
+function getSelectableWhitePieces(board) {
   const pieces = [];
   board.forEach((piece, index) => {
-    if (piece && isWhite(piece) && getLegalMoves(board, index).length > 0) {
+    if (piece && isWhite(piece) && getSelectableMoves(board, index).length > 0) {
       pieces.push(index);
     }
   });
   return pieces;
+}
+
+function getSelectableMoves(board, from) {
+  return getPseudoLegalMoves(board, from);
 }
 
 function getAllLegalMoves(board, forWhite) {
@@ -374,19 +429,159 @@ function getAllLegalMoves(board, forWhite) {
   return moves;
 }
 
+function showWinCelebration() {
+  activeRunId += 1;
+  pendingSelection = null;
+  flowStatus.textContent = "You won the game!";
+  levelFen.textContent = "Victory";
+  celebrationKicker.textContent = "Checkmate";
+  celebrationTitle.textContent = "You Won!";
+  celebrationMessage.textContent = "Beautiful finish. Return to levels when you are ready.";
+  winCelebration.classList.remove("hidden");
+  startNavigationChoiceFlow();
+}
+
+function showDrawMessage(reason = "Stalemate", message = "No legal move remains. Choose what to do next.") {
+  activeRunId += 1;
+  pendingSelection = null;
+  flowStatus.textContent = `Draw by ${reason.toLowerCase()}.`;
+  levelFen.textContent = "Draw";
+  celebrationKicker.textContent = "";
+  celebrationTitle.textContent = "This Is a Draw";
+  celebrationMessage.textContent = message;
+  winCelebration.classList.remove("hidden");
+  startNavigationChoiceFlow();
+}
+
+function hideWinCelebration() {
+  winCelebration.classList.add("hidden");
+}
+
+async function startNavigationChoiceFlow() {
+  const runId = ++navigationSelectionRunId;
+  const options = [
+    { button: backButton, action: goBackToLevels, label: "Back to Levels" },
+    { button: startOverButton, action: startOverLevel, label: "Start Over" },
+  ];
+
+  while (runId === navigationSelectionRunId && !winCelebration.classList.contains("hidden")) {
+    for (let index = 0; index < options.length; index += 1) {
+      if (runId !== navigationSelectionRunId || winCelebration.classList.contains("hidden")) return;
+
+      const option = options[index];
+      clearNavigationFlash();
+      option.button.classList.add("button-flash");
+      flowStatus.textContent = `Focus on ${option.label}. Press Space when it flashes.`;
+
+      const selected = await waitForNavigationSelectionOrTimeout(flashDurationMs, index, runId);
+      if (selected !== null) {
+        clearNavigationFlash();
+        option.action();
+        return;
+      }
+
+      option.button.classList.remove("button-flash");
+      await sleep(interFlashMs);
+    }
+  }
+
+  clearNavigationFlash();
+}
+
+function clearNavigationFlash() {
+  backButton.classList.remove("button-flash");
+  startOverButton.classList.remove("button-flash");
+}
+
+function blurBoardActionButtons() {
+  if (document.activeElement === backButton || document.activeElement === startOverButton) {
+    document.activeElement.blur();
+  }
+}
+
+function waitForNavigationSelectionOrTimeout(duration, index, runId) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timeoutId = window.setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      if (pendingSelection === chooseCurrent) {
+        pendingSelection = null;
+      }
+      resolve(null);
+    }, duration);
+
+    function chooseCurrent() {
+      if (resolved || runId !== navigationSelectionRunId) return;
+      resolved = true;
+      window.clearTimeout(timeoutId);
+      resolve(index);
+    }
+
+    pendingSelection = chooseCurrent;
+  });
+}
+
+function waitForLevelSelectionOrTimeout(duration, index, runId) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timeoutId = window.setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      if (pendingSelection === chooseCurrent) {
+        pendingSelection = null;
+      }
+      resolve(null);
+    }, duration);
+
+    function chooseCurrent() {
+      if (resolved || runId !== levelSelectionRunId || levelScreen.classList.contains("hidden")) return;
+      resolved = true;
+      window.clearTimeout(timeoutId);
+      resolve(index);
+    }
+
+    pendingSelection = chooseCurrent;
+  });
+}
+
 function chooseOpponentMove(moves) {
   const captures = moves.filter((move) => move.captures);
   const candidates = captures.length > 0 ? captures : moves;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
+function getGameStatus(board, forWhite) {
+  if (hasInsufficientMaterial(board)) return "insufficient-material";
+  const hasMoves = getAllLegalMoves(board, forWhite).length > 0;
+  if (hasMoves) return "active";
+  return isInCheck(board, forWhite) ? "checkmate" : "stalemate";
+}
+
+function hasInsufficientMaterial(board) {
+  const pieces = board.filter(Boolean);
+  return pieces.length === 2 && pieces.every((piece) => piece.toUpperCase() === "K");
+}
+
 function getLegalMoves(board, from) {
+  const piece = board[from];
+  if (!piece) return [];
+
+  const movingWhite = isWhite(piece);
+  return getPseudoLegalMoves(board, from).filter((target) => {
+    const nextBoard = makeMoveOnBoard(board, from, target);
+    return !isInCheck(nextBoard, movingWhite);
+  });
+}
+
+function getPseudoLegalMoves(board, from) {
   const piece = board[from];
   if (!piece) return [];
 
   const type = piece.toUpperCase();
   if (type === "R") return slidingMoves(board, from, [[0, 1], [1, 0], [0, -1], [-1, 0]]);
   if (type === "B") return slidingMoves(board, from, [[1, 1], [1, -1], [-1, -1], [-1, 1]]);
+  if (type === "Q") return slidingMoves(board, from, [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, -1], [-1, 1]]);
   if (type === "N") return jumpMoves(board, from, [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]);
   if (type === "K") return jumpMoves(board, from, [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]]);
   if (type === "P") return pawnMoves(board, from, piece);
@@ -407,7 +602,7 @@ function slidingMoves(board, from, directions) {
       if (!targetPiece) {
         moves.push(target);
       } else {
-        if (isWhite(targetPiece) !== movingWhite) {
+        if (isWhite(targetPiece) !== movingWhite && targetPiece.toUpperCase() !== "K") {
           moves.push(target);
         }
         break;
@@ -431,7 +626,7 @@ function jumpMoves(board, from, jumps) {
     if (!isOnBoard(nextFile, nextRank)) continue;
     const target = coordToIndex(nextFile, nextRank);
     const targetPiece = board[target];
-    if (!targetPiece || isWhite(targetPiece) !== movingWhite) {
+    if (!targetPiece || (isWhite(targetPiece) !== movingWhite && targetPiece.toUpperCase() !== "K")) {
       moves.push(target);
     }
   }
@@ -456,12 +651,91 @@ function pawnMoves(board, from, piece) {
     const targetFile = file + df;
     if (!isOnBoard(targetFile, forwardRank)) continue;
     const target = coordToIndex(targetFile, forwardRank);
-    if (board[target] && isWhite(board[target]) !== isWhite(piece)) {
+    if (board[target] && isWhite(board[target]) !== isWhite(piece) && board[target].toUpperCase() !== "K") {
       moves.push(target);
     }
   }
 
   return moves;
+}
+
+function isInCheck(board, forWhite) {
+  const kingSquare = findKing(board, forWhite);
+  if (kingSquare === null) return true;
+  return isSquareAttacked(board, kingSquare, !forWhite);
+}
+
+function findKing(board, forWhite) {
+  const king = forWhite ? "K" : "k";
+  const square = board.indexOf(king);
+  return square === -1 ? null : square;
+}
+
+function isSquareAttacked(board, square, byWhite) {
+  return board.some((piece, from) => {
+    if (!piece || isWhite(piece) !== byWhite) return false;
+    return attacksSquare(board, from, square);
+  });
+}
+
+function attacksSquare(board, from, target) {
+  const piece = board[from];
+  if (!piece) return false;
+
+  const { file: fromFile, rank: fromRank } = indexToCoord(from);
+  const { file: targetFile, rank: targetRank } = indexToCoord(target);
+  const fileDelta = targetFile - fromFile;
+  const rankDelta = targetRank - fromRank;
+  const type = piece.toUpperCase();
+
+  if (type === "P") {
+    const direction = isWhite(piece) ? 1 : -1;
+    return rankDelta === direction && Math.abs(fileDelta) === 1;
+  }
+
+  if (type === "N") {
+    return (
+      (Math.abs(fileDelta) === 1 && Math.abs(rankDelta) === 2)
+      || (Math.abs(fileDelta) === 2 && Math.abs(rankDelta) === 1)
+    );
+  }
+
+  if (type === "K") {
+    return Math.max(Math.abs(fileDelta), Math.abs(rankDelta)) === 1;
+  }
+
+  if (type === "R") {
+    return (fileDelta === 0 || rankDelta === 0) && isPathClear(board, from, target);
+  }
+
+  if (type === "B") {
+    return Math.abs(fileDelta) === Math.abs(rankDelta) && isPathClear(board, from, target);
+  }
+
+  if (type === "Q") {
+    const straight = fileDelta === 0 || rankDelta === 0;
+    const diagonal = Math.abs(fileDelta) === Math.abs(rankDelta);
+    return (straight || diagonal) && isPathClear(board, from, target);
+  }
+
+  return false;
+}
+
+function isPathClear(board, from, target) {
+  const { file: fromFile, rank: fromRank } = indexToCoord(from);
+  const { file: targetFile, rank: targetRank } = indexToCoord(target);
+  const fileStep = Math.sign(targetFile - fromFile);
+  const rankStep = Math.sign(targetRank - fromRank);
+  let nextFile = fromFile + fileStep;
+  let nextRank = fromRank + rankStep;
+
+  while (nextFile !== targetFile || nextRank !== targetRank) {
+    if (board[coordToIndex(nextFile, nextRank)]) return false;
+    nextFile += fileStep;
+    nextRank += rankStep;
+  }
+
+  return true;
 }
 
 function getRookDirectionGroups(fromSquare, moves) {
@@ -489,6 +763,13 @@ function getRookDirectionGroups(fromSquare, moves) {
 function movePiece(from, to) {
   currentBoard[to] = currentBoard[from];
   currentBoard[from] = null;
+}
+
+function makeMoveOnBoard(board, from, to) {
+  const nextBoard = board.slice();
+  nextBoard[to] = nextBoard[from];
+  nextBoard[from] = null;
+  return nextBoard;
 }
 
 function indexToCoord(index) {
@@ -549,7 +830,7 @@ async function startLevelSelectionFlow() {
       }
 
       setFlashingLevel(index);
-      const selected = await waitForSelectionOrTimeout(flashDurationMs, index, runId);
+      const selected = await waitForLevelSelectionOrTimeout(flashDurationMs, index, runId);
       if (selected !== null) {
         clearLevelFlash();
         openLevel(levels[selected]);
