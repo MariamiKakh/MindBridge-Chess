@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MindBridge Chess Levels</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
     <main class="app-shell">
@@ -27,9 +27,14 @@
             <h1 id="level-title"></h1>
             <p id="level-description"></p>
           </div>
-          <button id="back-button" class="secondary-button" type="button">
-            ← Back to Levels
-          </button>
+          <div class="board-actions">
+            <button id="back-button" class="secondary-button" type="button">
+              ← Back to Levels
+            </button>
+            <button id="start-over-button" class="secondary-button" type="button">
+              Start Over
+            </button>
+          </div>
         </header>
 
         <div class="board-layout">
@@ -65,9 +70,16 @@
             <code id="level-fen"></code>
           </aside>
         </div>
+        <div id="win-celebration" class="win-celebration hidden" aria-live="polite">
+          <div class="win-card">
+            <p id="celebration-kicker" class="win-kicker">Checkmate</p>
+            <h2 id="celebration-title">You Won!</h2>
+            <p id="celebration-message">Beautiful finish. Return to levels when you are ready.</p>
+          </div>
+        </div>
       </section>
     </main>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=12"></script>
   </body>
 </html>
