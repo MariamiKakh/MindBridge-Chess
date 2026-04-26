@@ -484,6 +484,18 @@ p {
   filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.24));
 }
 
+.piece[alt="Q"],
+.piece[alt="q"] {
+  width: 86%;
+  height: 86%;
+}
+
+.mini-board .piece[alt="Q"],
+.mini-board .piece[alt="q"] {
+  width: 92%;
+  height: 92%;
+}
+
 .fallback-piece {
   color: white;
   font-size: clamp(1.4rem, 7vw, 4.5rem);
