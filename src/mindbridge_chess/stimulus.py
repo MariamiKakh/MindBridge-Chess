@@ -171,7 +171,8 @@ class StimulusPresenter:
                     f"flash_off;square={chess.square_name(sq)};index={i};cycle={cycle + 1}",
                 )
                 self.win.flip()
-                self.wait(self._ifi)
+                if self._wait_for_manual_selection(self._ifi, i, "square", clear_events=False):
+                    return log
         return log
 
     def flash_square_groups(self, board: chess.Board, square_groups: list) -> list:
@@ -210,7 +211,8 @@ class StimulusPresenter:
                     f"group_flash_off;squares={square_names};index={i};cycle={cycle + 1}",
                 )
                 self.win.flip()
-                self.wait(self._ifi)
+                if self._wait_for_manual_selection(self._ifi, i, "group", clear_events=False):
+                    return log
         return log
 
     def flash_labeled_square_groups(
@@ -252,7 +254,8 @@ class StimulusPresenter:
                     f"target={target};squares={square_names}",
                 )
                 self.win.flip()
-                self.wait(self._ifi)
+                if self._wait_for_manual_selection(self._ifi, i, "level", clear_events=False):
+                    return log
         return log
 
     def show_calibration_message(self, text: str, board: chess.Board, duration: float = 4.0) -> None:
@@ -397,9 +400,16 @@ class StimulusPresenter:
         if 'escape' in keys or 'q' in keys:
             raise ExperimentStopped()
 
-    def _wait_for_manual_selection(self, duration: float, index: int, kind: str) -> bool:
+    def _wait_for_manual_selection(
+        self,
+        duration: float,
+        index: int,
+        kind: str,
+        clear_events: bool = True,
+    ) -> bool:
         """Return True when space is pressed during the active flash window."""
-        event.clearEvents(eventType='keyboard')
+        if clear_events:
+            event.clearEvents(eventType='keyboard')
         end_time = time.time() + duration
         while time.time() < end_time:
             keys = event.getKeys(keyList=['escape', 'q', 'space'])
