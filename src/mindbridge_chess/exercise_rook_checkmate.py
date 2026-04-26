@@ -8,8 +8,40 @@ from .eeg_acquisition import EEGAcquisition
 from .p300_detector import P300Detector
 from .stimulus import ExperimentStopped, StimulusPresenter
 
-# Fixed starting position: rooks separated, Ke4 (white) vs Ke8 (black)
-_EXERCISE_FEN = "4k3/8/8/8/4K3/R7/8/1R6 w - - 0 1"
+_LEVELS = [
+    {
+        "id": "two-rooks-mate",
+        "title": "Level 1: Two Rooks Mate",
+        "tag": "Beginner endgame",
+        "description": "Use two separated rooks to restrict the lone black king.",
+        "goal": "Practice selecting a rook, choosing a row or column direction, then choosing the final square.",
+        "fen": "4k3/8/8/8/4K3/R7/8/1R6 w - - 0 1",
+    },
+    {
+        "id": "rook-box",
+        "title": "Level 2: Rook Box",
+        "tag": "Rook control",
+        "description": "One rook and king coordinate to reduce the black king's space.",
+        "goal": "Focus on rook movement and direction selection before exact-square selection.",
+        "fen": "6k1/8/8/8/4K3/8/8/5R2 w - - 0 1",
+    },
+    {
+        "id": "minor-piece-net",
+        "title": "Level 3: Minor Piece Net",
+        "tag": "Piece coordination",
+        "description": "White king, bishop, and knight coordinate against a lone king.",
+        "goal": "Preview future levels where bishops and knights are also selectable pieces.",
+        "fen": "7k/8/8/8/4K3/8/3B4/6N1 w - - 0 1",
+    },
+    {
+        "id": "mixed-endgame",
+        "title": "Level 4: Mixed Endgame",
+        "tag": "Full visual test",
+        "description": "A richer board case for checking piece images and layout.",
+        "goal": "Use this level to visually verify kings, rooks, bishops, knights, and pawns.",
+        "fen": "4k3/2n5/8/8/4K3/2B5/R6P/1R6 w - - 0 1",
+    },
+]
 
 # Timing parameters (per spec)
 _FLASH_MS = 100
@@ -18,6 +50,8 @@ _CYCLES   = 8
 _START_DELAY_SECONDS = 5.0
 _POST_PIECE_SELECTION_DELAY_SECONDS = 3.0
 _POST_MOVE_DELAY_SECONDS = 3.0
+_OPPONENT_MOVE_DELAY_SECONDS = 1.2
+_OPPONENT_HIGHLIGHT_SECONDS = 0.9
 _CALIBRATION_CYCLES = 10
 _CALIBRATION_TARGET_BOX = "top_right"
 _CALIBRATION_INSTRUCTION_SECONDS = 4.0
@@ -44,21 +78,30 @@ class RookCheckmateExercise:
 
     # ------------------------------------------------------------------
     def run(self) -> None:
-        self.board.load_fen(_EXERCISE_FEN)
         try:
             self.eeg.start()
             status = self.eeg.status
             device = status.device_name or "none"
             self.presenter.send_marker(f"experiment_start;eeg_mode={status.mode};device={device}")
             self._run_calibration()
+            selected_level = self._select_level()
+            self.board.load_fen(selected_level["fen"])
+            self.presenter.set_current_level(selected_level)
+            self.presenter.send_marker(f"level_selected;id={selected_level['id']};fen={selected_level['fen']}")
+            self.presenter.show_message(
+                f"{selected_level['title']}\n{selected_level['tag']}",
+                board=self.board.board,
+                duration=3.0,
+            )
             self.presenter.send_marker("game_start")
+            self.presenter.set_status("Board opened. Flashing starts in 5 seconds.")
             self.presenter.draw_board(self.board.board)
             self.presenter.wait(_START_DELAY_SECONDS)
             while not self.board.is_game_over():
                 if self.board.turn == chess.WHITE:
                     self._white_turn()
                 else:
-                    self._skip_black_turn()
+                    self._black_auto_turn()
             if self.board.is_checkmate():
                 self.presenter.show_message("CHECKMATE", board=self.board.board)
         except ExperimentStopped:
@@ -123,13 +166,29 @@ class RookCheckmateExercise:
         )
 
     # ------------------------------------------------------------------
+    def _select_level(self) -> dict:
+        """Select one level using the calibrated P300 detector."""
+        self.presenter.send_marker(f"level_selection_start;count={len(_LEVELS)}")
+        self.presenter.draw_level_selector(_LEVELS)
+        self.presenter.wait(2.0)
+        self.eeg.clear()
+        self.presenter.wait(0.2)
+        flash_log = self.presenter.flash_level_options(_LEVELS, cycles=_CYCLES)
+        winner_idx = self._detect_index(flash_log, n_stimuli=len(_LEVELS))
+        level = _LEVELS[winner_idx]
+        self.presenter.send_marker(f"level_selection_end;index={winner_idx};id={level['id']}")
+        return level
+
+    # ------------------------------------------------------------------
     def _white_turn(self) -> None:
         # Step 1 — player selects which white piece to move.
+        self.presenter.set_status("Focus on a white piece. Press Space when it flashes.")
         piece_squares = self.board.get_movable_white_piece_squares()
         if not piece_squares:
             return
         selected_sq = self._flash_and_detect(piece_squares)
         self.presenter.send_marker(f"piece_selected;square={chess.square_name(selected_sq)}")
+        self.presenter.set_status("Piece selected. Direction or square choices start in 3 seconds.")
         self.presenter.wait(_POST_PIECE_SELECTION_DELAY_SECONDS)
 
         # Step 2 — player selects destination square
@@ -140,21 +199,32 @@ class RookCheckmateExercise:
         if selected_piece and selected_piece.piece_type == chess.ROOK:
             chosen_target = self._select_rook_target(selected_sq, legal_moves)
         else:
+            self.presenter.set_status("Focus on a destination box. Press Space when it flashes.")
             target_squares = [m.to_square for m in legal_moves]
             chosen_target  = self._flash_and_detect(target_squares)
 
         move = next(m for m in legal_moves if m.to_square == chosen_target)
         self.board.apply_move(move)
         self.presenter.send_marker(f"move_applied;uci={move.uci()}")
-        self.board.board.turn = chess.WHITE
+        self.presenter.set_status("White move applied. Opponent is thinking...")
         self.presenter.draw_board(self.board.board)
         self.presenter.wait(_POST_MOVE_DELAY_SECONDS)
 
-    def _skip_black_turn(self) -> None:
-        """Keep the exercise controlled only by the user's P300 selections."""
-        self.presenter.send_marker("black_turn_skipped")
-        self.board.board.turn = chess.WHITE
+    def _black_auto_turn(self) -> None:
+        """Let the opponent make one automatic black move."""
+        self.presenter.set_status("Opponent is thinking...")
+        self.presenter.wait(_OPPONENT_MOVE_DELAY_SECONDS)
+        move = self.board.get_black_auto_move()
+        if move is None:
+            self.presenter.send_marker("black_auto_no_move")
+            return
+        self.board.apply_move(move)
+        self.presenter.send_marker(f"black_auto_move;uci={move.uci()}")
+        self.presenter.set_status("Opponent moved. Focus on a white piece.")
+        self.presenter.draw_board(self.board.board, highlight_squares=[move.from_square, move.to_square])
+        self.presenter.wait(_OPPONENT_HIGHLIGHT_SECONDS)
         self.presenter.draw_board(self.board.board)
+        self.presenter.wait(_POST_MOVE_DELAY_SECONDS)
 
     # ------------------------------------------------------------------
     def _select_rook_target(self, selected_sq: int, legal_moves: list) -> int:
@@ -163,11 +233,13 @@ class RookCheckmateExercise:
         if not direction_groups:
             return legal_moves[0].to_square
 
+        self.presenter.set_status("Focus on a rook direction. Press Space when that path flashes.")
         group_index = self._flash_groups_and_detect(direction_groups)
         direction_squares = direction_groups[group_index]
         if len(direction_squares) == 1:
             return direction_squares[0]
 
+        self.presenter.set_status("Focus on the exact box inside that direction. Press Space when it flashes.")
         return self._flash_and_detect(direction_squares)
 
     def _rook_direction_groups(self, selected_sq: int, legal_moves: list) -> list:
@@ -223,6 +295,12 @@ class RookCheckmateExercise:
 
     def _detect_index(self, flash_log: list, n_stimuli: int) -> int:
         """Choose the stimulus that wins the most per-cycle P300 predictions."""
+        manual_index = self.presenter.consume_manual_selection()
+        if manual_index is not None:
+            winner = max(0, min(int(manual_index), n_stimuli - 1))
+            self.presenter.send_marker(f"decision_manual_result;index={winner}")
+            return winner
+
         self.presenter.wait(0.6)   # post-stimulus collection window for the last epoch
         eeg_data = self.eeg.read_buffer()
 

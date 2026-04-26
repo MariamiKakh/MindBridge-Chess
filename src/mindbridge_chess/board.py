@@ -33,9 +33,13 @@ class ChessBoard:
         return [m for m in self.board.legal_moves if m.from_square == square]
 
     def get_black_auto_move(self):
-        """Pick a random legal move for black (used for auto-play)."""
+        """Pick a simple automatic black move, preferring captures like the web demo."""
         moves = list(self.board.legal_moves)
-        return random.choice(moves) if moves else None
+        if not moves:
+            return None
+        captures = [move for move in moves if self.board.is_capture(move)]
+        candidates = captures or moves
+        return random.choice(candidates)
 
     def is_checkmate(self) -> bool:
         return self.board.is_checkmate()
