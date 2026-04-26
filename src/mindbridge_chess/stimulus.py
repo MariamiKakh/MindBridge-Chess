@@ -10,30 +10,36 @@ from psychopy import core, event, visual
 from .lsl_markers import LSLMarkerOutlet
 
 # Board geometry (pixels, PsychoPy units='pix', origin at screen centre)
-_SQ = 78
-_LEFT = -_SQ * 4
-_BOT = -_SQ * 4
+_WIN_W = 1400
+_WIN_H = 820
+_SQ = 86
+_BOARD_X = -24
+_BOARD_Y = -18
+_LEFT = _BOARD_X - _SQ * 4
+_BOT = _BOARD_Y - _SQ * 4
 
 # Colours ported from the VisualAdditions CSS palette into PsychoPy rgb space.
-_BG = (-0.82, -0.82, -0.82)          # #171717
-_PANEL = (-0.72, -0.72, -0.72)       # #242424
-_PANEL_SOFT = (-0.65, -0.65, -0.65)  # #2d2d2d
-_TEXT = (0.94, 0.91, 0.84)           # #f7f3ea
-_MUTED = (0.45, 0.36, 0.25)          # #b9ad9f
-_ACCENT = (1.00, 0.75, -0.52)        # #ffdf3d
-_LIGHT = (0.75, 0.06, -0.59)         # #df8734
-_DARK = (-0.29, -0.63, -0.80)        # #5a2f19
+_BG = (-0.82, -0.82, -0.82)             # #171717
+_PANEL = (-0.72, -0.72, -0.72)          # #242424
+_PANEL_SOFT = (-0.65, -0.65, -0.65)     # #2d2d2d
+_TEXT = (0.94, 0.91, 0.84)              # #f7f3ea
+_MUTED = (0.45, 0.36, 0.25)             # #b9ad9f
+_ACCENT = (1.00, 0.75, -0.52)           # #ffdf3d
+_ACCENT_SOFT = (1.00, 0.92, 0.40)       # #ffe45c
+_LIGHT = (0.75, 0.06, -0.59)            # #df8734
+_DARK = (-0.29, -0.63, -0.80)           # #5a2f19
+_BLACK = (-0.92, -0.92, -0.92)
 _FLASH = _ACCENT
 _WIN_BG = _BG
 _LEVEL_BOXES = [
-    (-435, -95),
-    (-145, -95),
-    ( 145, -95),
-    ( 435, -95),
+    (-450, -148),
+    (-150, -148),
+    ( 150, -148),
+    ( 450, -148),
 ]
 _LEVEL_CARD_W = 270
-_LEVEL_CARD_H = 390
-_LEVEL_PREVIEW_SQ = 25
+_LEVEL_CARD_H = 360
+_LEVEL_PREVIEW_SQ = 26
 _BOARD_FRAME_PAD = 10
 _FILES = "abcdefgh"
 _KING_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingBlack.png"
@@ -66,7 +72,7 @@ class StimulusPresenter:
         )
 
         self.win = visual.Window(
-            size=(1280, 720),
+            size=(_WIN_W, _WIN_H),
             fullscr=False,
             color=_WIN_BG,
             colorSpace='rgb',
@@ -328,6 +334,17 @@ class StimulusPresenter:
     ) -> None:
         """Display a text overlay (optionally on top of a board position)."""
         self._check_for_exit()
+        if text.strip().upper() == "CHECKMATE":
+            if board is not None:
+                self._draw_base(board)
+            else:
+                self._draw_background()
+            self._draw_win_card("Checkmate", "You Won!", "Beautiful finish. Return to levels when you are ready.")
+            self.win.callOnFlip(self._push_marker, f"message;value={text}")
+            self.win.flip()
+            self.wait(duration)
+            return
+
         if board is not None:
             self._draw_base(board)
         else:
@@ -405,8 +422,8 @@ class StimulusPresenter:
     def _draw_background(self) -> None:
         visual.Rect(
             self.win,
-            width=1280,
-            height=720,
+            width=_WIN_W,
+            height=_WIN_H,
             pos=(0, 0),
             fillColor=_BG,
             lineColor=None,
@@ -414,20 +431,20 @@ class StimulusPresenter:
         ).draw()
         visual.Circle(
             self.win,
-            radius=360,
-            pos=(-520, 290),
+            radius=470,
+            pos=(-560, 330),
             fillColor=_ACCENT,
             lineColor=None,
-            opacity=0.18,
+            opacity=0.22,
             colorSpace='rgb',
         ).draw()
         visual.Circle(
             self.win,
-            radius=320,
-            pos=(530, -285),
+            radius=420,
+            pos=(600, -330),
             fillColor=_ACCENT,
             lineColor=None,
-            opacity=0.12,
+            opacity=0.16,
             colorSpace='rgb',
         ).draw()
 
@@ -458,15 +475,35 @@ class StimulusPresenter:
 
     def _draw_panel(self, center: tuple, size: tuple, highlighted: bool = False) -> None:
         width, height = size
+        shadow_y = -14 if highlighted else -10
+        visual.Rect(
+            self.win,
+            width=width,
+            height=height,
+            pos=(center[0], center[1] + shadow_y),
+            fillColor=(-0.94, -0.94, -0.94),
+            lineColor=None,
+            opacity=0.36 if highlighted else 0.24,
+            colorSpace='rgb',
+        ).draw()
         if highlighted:
             visual.Rect(
                 self.win,
-                width=width + 22,
-                height=height + 22,
+                width=width + 26,
+                height=height + 26,
                 pos=center,
                 fillColor=_ACCENT,
                 lineColor=None,
-                opacity=0.24,
+                opacity=0.34,
+                colorSpace='rgb',
+            ).draw()
+            visual.Circle(
+                self.win,
+                radius=max(width, height) * 0.38,
+                pos=(center[0] - width * 0.22, center[1] + height * 0.32),
+                fillColor=(1.0, 0.92, 0.40),
+                lineColor=None,
+                opacity=0.18,
                 colorSpace='rgb',
             ).draw()
         visual.Rect(
@@ -479,6 +516,51 @@ class StimulusPresenter:
             lineWidth=4 if highlighted else 1,
             colorSpace='rgb',
         ).draw()
+
+    def _draw_win_card(self, kicker: str, title: str, message: str) -> None:
+        center = (0, 0)
+        visual.Rect(
+            self.win,
+            width=640,
+            height=300,
+            pos=(center[0], center[1] - 22),
+            fillColor=(-0.94, -0.94, -0.94),
+            lineColor=None,
+            opacity=0.62,
+            colorSpace='rgb',
+        ).draw()
+        visual.Rect(
+            self.win,
+            width=620,
+            height=280,
+            pos=center,
+            fillColor=(-0.84, -0.84, -0.84),
+            lineColor=_ACCENT,
+            lineWidth=2,
+            opacity=0.94,
+            colorSpace='rgb',
+        ).draw()
+        visual.Circle(
+            self.win,
+            radius=150,
+            pos=(-160, 78),
+            fillColor=(1.0, 1.0, 1.0),
+            lineColor=None,
+            opacity=0.12,
+            colorSpace='rgb',
+        ).draw()
+        visual.Circle(
+            self.win,
+            radius=170,
+            pos=(180, -88),
+            fillColor=_ACCENT,
+            lineColor=None,
+            opacity=0.18,
+            colorSpace='rgb',
+        ).draw()
+        self._draw_text(kicker.upper(), (0, 92), 16, _ACCENT, True, 560)
+        self._draw_text(title, (0, 22), 82, _ACCENT, True, 560)
+        self._draw_text(message, (0, -82), 22, _TEXT, True, 540)
 
     def _init_rects(self) -> None:
         for sq in chess.SQUARES:
@@ -590,14 +672,16 @@ class StimulusPresenter:
 
     def _draw_level_options(self, levels: list, highlight_index: int = None) -> None:
         self._draw_background()
-        self._draw_text("MindGambit", (-475, 300), 46, _ACCENT, font="Palatino Linotype")
-        self._draw_text("Choose an Endgame Level", (-475, 245), 42, _ACCENT, wrap_width=620)
+        self._draw_text("♕", (-654, 336), 58, (1.0, 0.91, 0.40), font="Times New Roman")
+        self._draw_text("MindGambit", (-615, 338), 52, _ACCENT_SOFT, font="Palatino Linotype", align_horiz="left")
+        self._draw_text("Choose an Endgame Level", (-660, 270), 42, _ACCENT, wrap_width=680, align_horiz="left")
         self._draw_text(
-            "Choose your battlefield. Focus on a level, or press Space when it flashes.",
-            (-405, 195),
+            "Choose your battlefield. Each level is a real endgame position - control the pieces with your mind.",
+            (-660, 222),
             22,
             _MUTED,
-            wrap_width=700,
+            wrap_width=760,
+            align_horiz="left",
         )
 
         for i, level in enumerate(levels):
@@ -608,18 +692,18 @@ class StimulusPresenter:
             if highlighted:
                 visual.Rect(
                     self.win,
-                    width=_LEVEL_CARD_W - 16,
-                    height=42,
-                    pos=(x, y_pos + 140),
+                    width=_LEVEL_CARD_W - 28,
+                    height=58,
+                    pos=(x, y_pos + 118),
                     fillColor=_ACCENT,
                     lineColor=None,
-                    opacity=0.22,
+                    opacity=0.18,
                     colorSpace='rgb',
                 ).draw()
-            self._draw_level_preview(level["fen"], center=(x, y_pos + 86))
-            self._draw_text(level["tag"].upper(), (x - 108, y_pos - 58), 13, _ACCENT, True, 220, "left")
-            self._draw_text(level["title"], (x - 108, y_pos - 86), 21, _TEXT, True, 220, "left")
-            self._draw_text(level["description"], (x - 108, y_pos - 132), 15, _MUTED, False, 220, "left")
+            self._draw_level_preview(level["fen"], center=(x, y_pos + 83))
+            self._draw_text(level["tag"].upper(), (x - 112, y_pos - 62), 13, _ACCENT, True, 225, "left")
+            self._draw_text(level["title"], (x - 112, y_pos - 92), 22, _TEXT, True, 225, "left")
+            self._draw_text(level["description"], (x - 112, y_pos - 140), 16, _MUTED, False, 225, "left")
 
     def _draw_level_preview(self, fen: str, center: tuple) -> None:
         board = chess.Board(fen)
@@ -676,17 +760,43 @@ class StimulusPresenter:
 
     def _draw_board_header(self) -> None:
         level = self._current_level or {}
-        self._draw_text("SELECTED LEVEL", (-580, 305), 14, _ACCENT, True, 260, "left")
-        self._draw_text(level.get("title", "MindGambit Chess"), (-580, 272), 28, _TEXT, True, 300, "left")
+        self._draw_text("SELECTED LEVEL", (-680, 346), 16, _ACCENT, True, 310, "left")
+        self._draw_text(level.get("title", "MindGambit Chess"), (-680, 306), 30, _TEXT, True, 310, "left")
         self._draw_text(
             level.get("description", "Focus on the flashing chess option."),
-            (-580, 220),
-            17,
+            (-680, 246),
+            18,
             _MUTED,
             False,
-            300,
+            310,
             "left",
         )
+        self._draw_action_button((-572, 56), "← Back to Levels")
+        self._draw_action_button((-572, -36), "Start Over")
+
+    def _draw_action_button(self, center: tuple, label: str, highlighted: bool = False) -> None:
+        if highlighted:
+            visual.Rect(
+                self.win,
+                width=230,
+                height=58,
+                pos=center,
+                fillColor=_ACCENT,
+                lineColor=None,
+                opacity=0.28,
+                colorSpace='rgb',
+            ).draw()
+        visual.Rect(
+            self.win,
+            width=215,
+            height=52,
+            pos=center,
+            fillColor=_PANEL,
+            lineColor=_ACCENT if highlighted else (-0.55, -0.55, -0.55),
+            lineWidth=2 if highlighted else 1,
+            colorSpace='rgb',
+        ).draw()
+        self._draw_text(label, (center[0] - 78, center[1]), 18, _TEXT, True, 170, "left")
 
     def _draw_board_shell(self) -> None:
         board_size = _SQ * 8
@@ -694,7 +804,17 @@ class StimulusPresenter:
             self.win,
             width=board_size + _BOARD_FRAME_PAD * 2,
             height=board_size + _BOARD_FRAME_PAD * 2,
-            pos=(0, 0),
+            pos=(_BOARD_X, _BOARD_Y - 22),
+            fillColor=(-0.94, -0.94, -0.94),
+            lineColor=None,
+            opacity=0.35,
+            colorSpace='rgb',
+        ).draw()
+        visual.Rect(
+            self.win,
+            width=board_size + _BOARD_FRAME_PAD * 2,
+            height=board_size + _BOARD_FRAME_PAD * 2,
+            pos=(_BOARD_X, _BOARD_Y),
             fillColor=_PANEL,
             lineColor=_PANEL,
             lineWidth=10,
@@ -711,19 +831,37 @@ class StimulusPresenter:
             self._draw_text(str(rank), (_LEFT - 22, y), 14, _ACCENT, True)
 
     def _draw_level_panel(self, board: chess.Board, highlights: set) -> None:
-        x, y = 505, 70
-        self._draw_panel((x, y), (300, 455))
+        x, y = 535, 110
+        self._draw_panel((x, y), (340, 500))
         level = self._current_level or {}
         highlighted_text = self._format_highlights(highlights) if highlights else "Waiting..."
         goal = level.get("goal", "Watch the target square during calibration.")
         fen = board.fen()
-        self._draw_text("Status", (x - 125, y + 180), 17, _TEXT, True, 250, "left")
-        self._draw_text(self._status_text, (x - 125, y + 145), 15, _MUTED, False, 250, "left")
-        self._draw_text("Endgame Goal", (x - 125, y + 70), 17, _TEXT, True, 250, "left")
-        self._draw_text(goal, (x - 125, y + 25), 15, _MUTED, False, 250, "left")
-        self._draw_text("Chosen Position", (x - 125, y - 80), 17, _TEXT, True, 250, "left")
-        self._draw_text(highlighted_text, (x - 125, y - 112), 15, _ACCENT, False, 250, "left")
-        self._draw_text(fen, (x - 125, y - 165), 12, _ACCENT, False, 250, "left")
+        self._draw_text("Status", (x - 145, y + 202), 17, _TEXT, True, 290, "left")
+        self._draw_text(self._status_text, (x - 145, y + 164), 16, _MUTED, False, 290, "left")
+        self._draw_text("Endgame Goal", (x - 145, y + 76), 17, _TEXT, True, 290, "left")
+        self._draw_text(goal, (x - 145, y + 28), 15, _MUTED, False, 290, "left")
+        self._draw_text("Chosen Position", (x - 145, y - 88), 17, _TEXT, True, 290, "left")
+        visual.Rect(
+            self.win,
+            width=290,
+            height=48,
+            pos=(x, y - 132),
+            fillColor=_BLACK,
+            lineColor=None,
+            colorSpace='rgb',
+        ).draw()
+        self._draw_text(highlighted_text, (x - 132, y - 132), 16, _ACCENT, False, 260, "left")
+        visual.Rect(
+            self.win,
+            width=290,
+            height=70,
+            pos=(x, y - 198),
+            fillColor=_BLACK,
+            lineColor=None,
+            colorSpace='rgb',
+        ).draw()
+        self._draw_text(fen, (x - 132, y - 198), 12, _ACCENT, False, 260, "left")
 
     def _format_highlights(self, highlights: set) -> str:
         names = [chess.square_name(square) for square in sorted(highlights)]
