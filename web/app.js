@@ -11,9 +11,9 @@ const levels = [
     id: "rook-box",
     title: "Level 2: Rook Fortress",
     tag: "Rook duo",
-    description: "Two rooks and the king fence the black king while a black knight lurks on the rim.",
+    description: "Two rooks and the king fence the black king while a black knight and bishop press from the side.",
     goal: "Practice rook paths with more targets on the board, then pick the exact landing square.",
-    fen: "6k1/8/8/2n5/4K3/8/8/5RR1 w - - 0 1",
+    fen: "6k1/8/1bn5/8/4K3/8/8/5RR1 w - - 0 1",
   },
   {
     id: "minor-piece-net",
