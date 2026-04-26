@@ -22,7 +22,12 @@ _WIN_BG = (-0.69, -0.69, -0.69)   # dark grey
 _KING_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingBlack.png"
 _KING_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KingWhite.png"
 _ROOK_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "RookWhite.png"
-_KNIGHT_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "figures" / "knight.png"
+_ROOK_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "RookBlack.png"
+_KNIGHT_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KnightWhite.png"
+_KNIGHT_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "KnightBlack.png"
+_BISHOP_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "BishopWhite.png"
+_BISHOP_BLACK_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "BishopBlack.png"
+_PAWN_WHITE_IMAGE = Path(__file__).resolve().parents[2] / "assets" / "Figures" / "PawnWhite.png"
 
 
 class ExperimentStopped(Exception):
@@ -55,7 +60,12 @@ class StimulusPresenter:
         self._black_king = self._init_image(_KING_BLACK_IMAGE, (_SQ * 0.72, _SQ * 0.72))
         self._white_king = self._init_image(_KING_WHITE_IMAGE, (_SQ * 0.72, _SQ * 0.72))
         self._white_rook = self._init_white_rook_image()
-        self._knight = self._init_knight_image()
+        self._black_rook = self._init_black_rook_image()
+        self._white_knight = self._init_white_knight_image()
+        self._black_knight = self._init_black_knight_image()
+        self._white_bishop = self._init_white_bishop_image()
+        self._black_bishop = self._init_black_bishop_image()
+        self._white_pawn = self._init_white_pawn_image()
         self._init_rects()
 
     # ------------------------------------------------------------------
@@ -270,13 +280,63 @@ class StimulusPresenter:
             units='pix',
         )
 
-    def _init_knight_image(self):
-        if not _KNIGHT_IMAGE.exists():
+    def _init_black_rook_image(self):
+        if not _ROOK_BLACK_IMAGE.exists():
             return None
         return visual.ImageStim(
             self.win,
-            image=str(_KNIGHT_IMAGE),
+            image=str(_ROOK_BLACK_IMAGE),
+            size=(_SQ * 0.62, _SQ * 0.68),
+            units='pix',
+        )
+
+    def _init_white_knight_image(self):
+        if not _KNIGHT_WHITE_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_KNIGHT_WHITE_IMAGE),
             size=(_SQ * 0.62, _SQ * 0.78),
+            units='pix',
+        )
+
+    def _init_black_knight_image(self):
+        if not _KNIGHT_BLACK_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_KNIGHT_BLACK_IMAGE),
+            size=(_SQ * 0.62, _SQ * 0.78),
+            units='pix',
+        )
+
+    def _init_white_bishop_image(self):
+        if not _BISHOP_WHITE_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_BISHOP_WHITE_IMAGE),
+            size=(_SQ * 0.68, _SQ * 0.72),
+            units='pix',
+        )
+
+    def _init_black_bishop_image(self):
+        if not _BISHOP_BLACK_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_BISHOP_BLACK_IMAGE),
+            size=(_SQ * 0.68, _SQ * 0.72),
+            units='pix',
+        )
+
+    def _init_white_pawn_image(self):
+        if not _PAWN_WHITE_IMAGE.exists():
+            return None
+        return visual.ImageStim(
+            self.win,
+            image=str(_PAWN_WHITE_IMAGE),
+            size=(_SQ * 0.56, _SQ * 0.72),
             units='pix',
         )
 
@@ -314,9 +374,53 @@ class StimulusPresenter:
                 self._white_rook.pos = (x, y)
                 self._white_rook.draw()
                 continue
-            if piece.piece_type == chess.KNIGHT and self._knight is not None:
-                self._knight.pos = (x, y)
-                self._knight.draw()
+            if (
+                piece.piece_type == chess.ROOK
+                and piece.color == chess.BLACK
+                and self._black_rook is not None
+            ):
+                self._black_rook.pos = (x, y)
+                self._black_rook.draw()
+                continue
+            if (
+                piece.piece_type == chess.KNIGHT
+                and piece.color == chess.WHITE
+                and self._white_knight is not None
+            ):
+                self._white_knight.pos = (x, y)
+                self._white_knight.draw()
+                continue
+            if (
+                piece.piece_type == chess.KNIGHT
+                and piece.color == chess.BLACK
+                and self._black_knight is not None
+            ):
+                self._black_knight.pos = (x, y)
+                self._black_knight.draw()
+                continue
+            if (
+                piece.piece_type == chess.BISHOP
+                and piece.color == chess.WHITE
+                and self._white_bishop is not None
+            ):
+                self._white_bishop.pos = (x, y)
+                self._white_bishop.draw()
+                continue
+            if (
+                piece.piece_type == chess.BISHOP
+                and piece.color == chess.BLACK
+                and self._black_bishop is not None
+            ):
+                self._black_bishop.pos = (x, y)
+                self._black_bishop.draw()
+                continue
+            if (
+                piece.piece_type == chess.PAWN
+                and piece.color == chess.WHITE
+                and self._white_pawn is not None
+            ):
+                self._white_pawn.pos = (x, y)
+                self._white_pawn.draw()
                 continue
 
             color = (1.0, 1.0, 1.0) if piece.color == chess.WHITE else (-0.84, -0.84, -0.84)

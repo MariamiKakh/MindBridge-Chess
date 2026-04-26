@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindBridge Chess Levels</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="level-screen" class="screen">
+        <div class="hero">
+          <p class="eyebrow brand-mark">MindGambit</p>
+          <h1>Choose an Endgame Level</h1>
+          <p>
+            Choose your battlefield. Each level is a real endgame position — control the pieces with your mind.
+          </p>
+        </div>
+
+        <div id="levels" class="levels-grid" aria-label="Endgame levels"></div>
+      </section>
+
+      <section id="board-screen" class="screen hidden">
+        <header class="board-header">
+          <div>
+            <p class="eyebrow">Selected Level</p>
+            <h1 id="level-title"></h1>
+            <p id="level-description"></p>
+          </div>
+          <button id="back-button" class="secondary-button" type="button">
+            ← Back to Levels
+          </button>
+        </header>
+
+        <div class="board-layout">
+          <div class="board-shell">
+            <div id="main-board" class="chess-board large-board" aria-label="Chess board"></div>
+            <div class="file-labels" aria-hidden="true">
+              <span>a</span>
+              <span>b</span>
+              <span>c</span>
+              <span>d</span>
+              <span>e</span>
+              <span>f</span>
+              <span>g</span>
+              <span>h</span>
+            </div>
+            <div class="rank-labels" aria-hidden="true">
+              <span>8</span>
+              <span>7</span>
+              <span>6</span>
+              <span>5</span>
+              <span>4</span>
+              <span>3</span>
+              <span>2</span>
+              <span>1</span>
+            </div>
+          </div>
+          <aside class="level-panel">
+            <h2>Status</h2>
+            <p id="flow-status">Choose a level to start.</p>
+            <h2>Endgame Goal</h2>
+            <p id="level-goal"></p>
+            <h2>Chosen Position</h2>
+            <code id="level-fen"></code>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js?v=2"></script>
+  </body>
+</html>
