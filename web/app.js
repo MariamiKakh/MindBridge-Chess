@@ -9,27 +9,27 @@ const levels = [
   },
   {
     id: "rook-box",
-    title: "Level 2: Rook Box",
-    tag: "Rook control",
-    description: "One rook and king coordinate to reduce the black king's space.",
-    goal: "Focus on rook movement and direction selection before exact-square selection.",
-    fen: "6k1/8/8/8/4K3/8/8/5R2 w - - 0 1",
+    title: "Level 2: Rook Fortress",
+    tag: "Rook duo",
+    description: "Two rooks and the king fence the black king while a black knight lurks on the rim.",
+    goal: "Practice rook paths with more targets on the board, then pick the exact landing square.",
+    fen: "6k1/8/8/2n5/4K3/8/8/5RR1 w - - 0 1",
   },
   {
     id: "minor-piece-net",
-    title: "Level 3: Minor Piece Net",
-    tag: "Piece coordination",
-    description: "White king, bishop, and knight coordinate against a lone king.",
-    goal: "Preview future levels where bishops and knights are also selectable pieces.",
-    fen: "7k/8/8/8/4K3/8/3B4/6N1 w - - 0 1",
+    title: "Level 3: Minor Piece Brigade",
+    tag: "Bishops & knights",
+    description: "Two bishops and two knights join the king to hem in the black king and a pawn.",
+    goal: "Switch between knight jumps, bishop diagonals, and king steps while the board stays crowded.",
+    fen: "7k/8/6p1/8/2NK1B2/8/3B1N2/8 w - - 0 1",
   },
   {
     id: "mixed-endgame",
-    title: "Level 4: Mixed Endgame",
-    tag: "Full visual test",
-    description: "A richer board case for checking piece images and layout.",
-    goal: "Use this level to visually verify kings, rooks, bishops, knights, and pawns.",
-    fen: "4k3/2n5/8/8/4K3/2B5/R6P/1R6 w - - 0 1",
+    title: "Level 4: Royal Skirmish",
+    tag: "Full battle",
+    description: "Queens, rooks, minor pieces, and pawns on both sides — a stress test for visuals and movement.",
+    goal: "Exercise every piece type: pick among many legal destinations and watch black answer with a full army.",
+    fen: "2q1k1r1/8/1bn5/6p1/4P3/3K1N2/6P1/QRB5 w - - 0 1",
   },
 ];
 
@@ -43,6 +43,9 @@ const pieceImages = {
   B: "../assets/Figures/BishopWhite.png",
   b: "../assets/Figures/BishopBlack.png",
   P: "../assets/Figures/PawnWhite.png",
+  p: "../assets/Figures/PawnWhite.png",
+  Q: "../assets/Figures/QueenWhite.png",
+  q: "../assets/Figures/QueenWhite.png",
 };
 
 const fallbackPieces = {
